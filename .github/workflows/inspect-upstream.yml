@@ -16,9 +16,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Install analysis tools
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends xorriso squashfs-tools fdisk mtools dosfstools gnupg jq time sbsigntool file binutils
+        run: bash scripts/install-tools.sh inspect
       - name: Measure runner and check space
         run: source scripts/common.sh; preflight
       - id: source

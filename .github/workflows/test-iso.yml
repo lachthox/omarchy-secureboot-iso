@@ -62,9 +62,7 @@ jobs:
           assert m['upstream']['sha256']==c['sha256']
           assert m.get('test_harness_protocol')==1
           PY
-      - run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends qemu-system-x86 qemu-utils ovmf dosfstools mtools gdisk xorriso
+      - run: bash scripts/install-tools.sh test
       - uses: ./.github/actions/vm-test
         with:
           full_install: ${{ inputs.full_install || false }}

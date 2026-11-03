@@ -44,8 +44,11 @@ not required for this measured workload. VM installation resources are measured
 separately. Artifact distribution was substantially slower than guest startup;
 the normal pipeline now tests in the build workspace before uploading once.
 
-Tool versions and runner image metadata are retained; Ubuntu packages are
-recorded, not claimed to be immutable or byte-reproducible across image updates.
+The transformation and VM tool packages are version-locked in
+`configs/tools-ubuntu24.json`, using versions measured in successful runs.
+Unavailable versions fail instead of silently upgrading. Transitive packages,
+GitHub CLI/Python and runner image metadata are also recorded; the full hosted
+OS image is not claimed to be immutable or byte-reproducible across updates.
 
 ## Release and Secure Boot blockers
 

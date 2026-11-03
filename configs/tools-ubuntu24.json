@@ -1,0 +1,24 @@
+{
+  "packages": {
+    "xorriso": "1:1.5.6-1.1ubuntu3",
+    "squashfs-tools": "1:4.6.1-1build1",
+    "fdisk": "2.39.3-9ubuntu6.6",
+    "mtools": "4.0.43-1build1",
+    "dosfstools": "4.2-1.1build1",
+    "gnupg": "2.4.4-2ubuntu17.6",
+    "jq": "1.7.1-3ubuntu0.24.04.2",
+    "time": "1.9-0.2build1",
+    "sbsigntool": "0.9.4-3.1ubuntu7",
+    "file": "1:5.45-3build1",
+    "binutils": "2.42-4ubuntu2.10",
+    "qemu-system-x86": "1:8.2.2+ds-0ubuntu1.18",
+    "qemu-utils": "1:8.2.2+ds-0ubuntu1.18",
+    "ovmf": "2024.02-2ubuntu0.10",
+    "gdisk": "1.0.10-1build1"
+  },
+  "profiles": {
+    "inspect": ["xorriso", "squashfs-tools", "fdisk", "mtools", "dosfstools", "gnupg", "jq", "time", "sbsigntool", "file", "binutils"],
+    "build": ["xorriso", "squashfs-tools", "fdisk", "mtools", "dosfstools", "gnupg", "jq", "time", "sbsigntool", "file", "binutils", "qemu-system-x86", "qemu-utils", "ovmf", "gdisk"],
+    "test": ["qemu-system-x86", "qemu-utils", "ovmf", "dosfstools", "mtools", "gdisk", "xorriso", "time"]
+  }
+}

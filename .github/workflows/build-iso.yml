@@ -25,9 +25,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
-      - run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends xorriso squashfs-tools fdisk gnupg jq time qemu-system-x86 qemu-utils ovmf dosfstools mtools gdisk sbsigntool file binutils
+      - run: bash scripts/install-tools.sh build
       - run: source scripts/common.sh; MIN_FREE_BYTES=40000000000 preflight
       - id: source
         run: echo "sha=$(jq -r .sha256 configs/upstream.json)" >> "$GITHUB_OUTPUT"
