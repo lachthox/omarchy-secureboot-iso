@@ -276,6 +276,9 @@ def writer():
             # Accepted only after the harness confirms its read-only share and
             # exact VM disk identities. Never reachable in a physical session.
             import shutil
+            for name in ('serial-getty@ttyS0.service', 'getty@tty1.service'):
+                service = pathlib.Path('/mnt/etc/systemd/system')/name
+                service.symlink_to('/dev/null')
             if mapper:
                 pathlib.Path('/mnt/etc/limine-entry-tool.d/98-ci-serial.conf').write_text(
                     'KERNEL_CMDLINE[default]+=" console=ttyS0,115200 disablehooks=plymouth plymouth.enable=0"\n')

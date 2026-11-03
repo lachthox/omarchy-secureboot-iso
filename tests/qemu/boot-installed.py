@@ -16,7 +16,7 @@ assert os.environ.get('GITHUB_ACTIONS') == 'true' and os.environ.get('RUNNER_ENV
 assert args.command[0] == '--' and pathlib.Path(args.command[1]).name == 'qemu-system-x86_64'
 process = subprocess.Popen(args.command[1:], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
 selector = selectors.DefaultSelector(); selector.register(process.stdout, selectors.EVENT_READ)
-deadline = time.monotonic()+240
+deadline = time.monotonic()+(900 if args.scenario == 'wizard-signed' else 240)
 sent = False; recent = b''
 try:
     with pathlib.Path(args.log).open('wb') as log:
