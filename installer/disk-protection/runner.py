@@ -300,7 +300,10 @@ def release_target_mounts():
     active = [line.split()[0] for line in pathlib.Path('/proc/swaps').read_text().splitlines()[1:]]
     if '/mnt/swap/swapfile' in active:
         subprocess.run(['swapoff','/mnt/swap/swapfile'],check=True)
-    subprocess.run(['umount','--recursive','/mnt'],check=True)
+    # Remaining package helper processes can still have CWDs in the target.
+    # systemd kills that entire cgroup when the writer exits; its private mount
+    # namespace then disappears. A forced/lazy unmount here would race them.
+    subprocess.run(['sync'],check=True)
 
 
 if __name__ == '__main__':
