@@ -21,6 +21,9 @@ runs:
     - name: Changed device order and denied-write controls
       shell: bash
       run: /usr/bin/time -v -o out/qemu/reordered-time.txt env SCENARIO=reordered ISO_PREVERIFIED=1 bash tests/qemu/boot.sh
+    - name: Reject an unrecognized target without writes
+      shell: bash
+      run: /usr/bin/time -v -o out/qemu/invalid-time.txt env SCENARIO=invalid ISO_PREVERIFIED=1 bash tests/qemu/boot.sh
     - name: Publish small smoke reports before longer installation testing
       if: always()
       uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9

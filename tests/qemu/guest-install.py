@@ -5,6 +5,7 @@ import os
 import pathlib
 import subprocess
 import sys
+import shutil
 
 sys.path.insert(0,str(pathlib.Path(__file__).resolve().parent))
 from importlib.util import spec_from_file_location, module_from_spec
@@ -27,6 +28,10 @@ def launch():
     assert config['omarchy_install']['defer_provisioning'] and not config['custom_commands']
     mods[0]['device']=target
     cfg.write_text(json.dumps(config))
+    subprocess.run(['efibootmgr','--create','--disk',disks['WINDOWS_A']['name'],'--part','1',
+        '--label','Windows Boot Manager','--loader','\\EFI\\Microsoft\\Boot\\bootmgfw.efi'],check=True)
+    windows_before=[line for line in subprocess.check_output(['efibootmgr','-v'],text=True).splitlines() if 'Windows Boot Manager' in line]
+    assert len(windows_before)==1
     # Allocate the two expected partition device numbers inside a stage that
     # can write ONLY the verified synthetic target. No protected partition is
     # writable. Then allow only these descendants for the upstream phase.
@@ -56,6 +61,9 @@ def launch():
         '--setenv=OMARCHY_MIRROR='+pathlib.Path('/root/omarchy_mirror').read_text().strip(),
         '/usr/bin/python',str(pathlib.Path(__file__).resolve()),'--install-child']
     subprocess.run(command,check=True)
+    windows_after=[line for line in subprocess.check_output(['efibootmgr','-v'],text=True).splitlines() if 'Windows Boot Manager' in line]
+    assert windows_after==windows_before, 'Synthetic Windows EFI boot entry changed'
+    print('WINDOWS_NVRAM_ENTRY_PRESERVED',flush=True)
     print('GUARDED_UPSTREAM_INSTALL_OK',flush=True)
 
 
@@ -65,6 +73,17 @@ def child():
         '--creds','/root/user_credentials.json','--defer-provisioning-file','/root/defer-provisioning'],check=True)
     assert pathlib.Path('/mnt/boot/EFI/limine/limine_x64.efi').is_file()
     assert list(pathlib.Path('/mnt/boot/EFI/Linux').glob('*.efi'))
+    # The installed-system probe is injected only into the synthetic target,
+    # after upstream installation. It is not part of the public live root.
+    target=pathlib.Path('/mnt')
+    probe=target/'usr/local/lib/omarchy-ci-installed-boot'
+    probe.parent.mkdir(parents=True,exist_ok=True)
+    shutil.copyfile(pathlib.Path(__file__).with_name('installed-boot.sh'),probe)
+    probe.chmod(0o755)
+    unit=target/'etc/systemd/system/omarchy-ci-installed.service'
+    unit.write_text('[Unit]\nDescription=CI installed-system boot probe\nAfter=local-fs.target\nConditionVirtualization=qemu\n[Service]\nType=oneshot\nExecStart=/usr/local/lib/omarchy-ci-installed-boot\n[Install]\nWantedBy=multi-user.target\n')
+    wants=unit.parent/'multi-user.target.wants'; wants.mkdir(exist_ok=True)
+    (wants/unit.name).symlink_to('/etc/systemd/system/'+unit.name)
     print('INSTALLED_TARGET_ESP_AND_UKI_PRESENT',flush=True)
 
 

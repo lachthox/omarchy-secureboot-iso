@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 source scripts/common.sh
 cloud_only
-[[ $SCENARIO =~ ^(cdrom|usb|reordered|install)$ ]]
+[[ $SCENARIO =~ ^(cdrom|usb|reordered|invalid|install)$ ]]
 report=out/qemu/$SCENARIO
 mkdir -p work/vm out/qemu
 mkdir -p "$report"
@@ -16,10 +16,13 @@ PY
 python3 tests/qemu/create-fixtures.py
 if [[ $SCENARIO == install ]]; then python3 tests/qemu/make-cidata.py; fi
 sha256sum work/vm/windows-system.raw work/vm/windows-data.raw > "$report/protected-before.sha256"
+if [[ $SCENARIO == invalid ]]; then sha256sum work/vm/target.raw >> "$report/protected-before.sha256"; fi
 cp /usr/share/OVMF/OVMF_VARS_4M.fd work/vm/vars.fd
+target_serial=OMARCHYTESTC
+if [[ $SCENARIO == invalid ]]; then target_serial=UNRECOGNIZED; fi
 disks=(-drive file=work/vm/windows-system.raw,format=raw,if=none,id=a -device virtio-blk-pci,drive=a,serial=WINDOWS_A
        -drive file=work/vm/windows-data.raw,format=raw,if=none,id=b -device virtio-blk-pci,drive=b,serial=WINDOWS_B
-       -drive file=work/vm/target.raw,format=raw,if=none,id=c -device virtio-blk-pci,drive=c,serial=OMARCHYTESTC)
+       -drive file=work/vm/target.raw,format=raw,if=none,id=c -device "virtio-blk-pci,drive=c,serial=$target_serial")
 if [[ $SCENARIO == reordered ]]; then
   disks=(-drive file=work/vm/target.raw,format=raw,if=none,id=c -device virtio-blk-pci,drive=c,serial=OMARCHYTESTC
          -drive file=work/vm/windows-data.raw,format=raw,if=none,id=b -device virtio-blk-pci,drive=b,serial=WINDOWS_B
@@ -45,13 +48,27 @@ status=$?
 set -e
 sha256sum -c "$report/protected-before.sha256" > "$report/protected-after.txt"
 [[ $status == 0 ]] || { cat "$report/qemu.log"; tail -80 "$report/serial.log"; exit "$status"; }
+if [[ $SCENARIO == invalid ]]; then
+  grep -q OMARCHY_CI_FAILURE "$report/serial.log"
+  grep -q 'Unexpected guest disks; refusing writes' "$report/serial.log"
+  printf 'Unrecognized target refused; every synthetic disk byte unchanged.\n' > "$report/result.txt"
+  exit 0
+fi
 grep -q 'OMARCHY_CUSTOM_UEFI_BOOT_OK' "$report/serial.log"
 grep -q 'UPSTREAM_INSTALLER_AND_CIDATA_PRESENT' "$report/serial.log"
 grep -q 'CURRENT_CI_HARNESS_LOADED' "$report/serial.log"
 grep -q 'KERNEL_DEVICE_WRITE_BOUNDARY_OK' "$report/serial.log"
 if [[ $SCENARIO == install ]]; then
   grep -q 'GUARDED_UPSTREAM_INSTALL_OK' "$report/serial.log"
-  printf 'Upstream installation completed in device sandbox; protected bytes unchanged.\n' > "$report/result.txt"
+  grep -q 'WINDOWS_NVRAM_ENTRY_PRESERVED' "$report/serial.log"
+  timeout 180 qemu-system-x86_64 -machine q35 "${accel[@]}" -m 8192 -smp 4 \
+    -drive if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.fd \
+    -drive if=pflash,format=raw,file=work/vm/vars.fd "${disks[@]}" \
+    -boot c -display none -serial "file:$report/installed-serial.log" -monitor none -nic none -no-reboot \
+    > "$report/installed-qemu.log" 2>&1
+  sha256sum -c "$report/protected-before.sha256" > "$report/protected-after-installed-boot.txt"
+  grep -q OMARCHY_INSTALLED_UEFI_BOOT_OK "$report/installed-serial.log"
+  printf 'Upstream install and installed-system UEFI boot passed; protected bytes and Windows NVRAM entry unchanged.\n' > "$report/result.txt"
 else
   printf 'UEFI boot and kernel device-write boundary passed; protected bytes unchanged. No installation performed.\n' > "$report/result.txt"
 fi
