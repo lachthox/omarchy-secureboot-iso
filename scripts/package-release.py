@@ -5,6 +5,7 @@ import json
 import os
 import pathlib
 import re
+import subprocess
 
 
 def package(source, destination, repository, tag, part_size=1_500_000_000):
@@ -31,7 +32,8 @@ def package(source, destination, repository, tag, part_size=1_500_000_000):
             parts.append({'name':name,'size':size,'sha256':digest.hexdigest()}); index+=1
             assert index<=999
     assert total>0
-    manifest={'schema':1,'repository':repository,'tag':tag,'file':source.name,'size':total,'sha256':overall.hexdigest(),'parts':parts}
+    manifest={'schema':1,'repository':repository,'tag':tag,'file':source.name,'size':total,'sha256':overall.hexdigest(),'parts':parts,
+              'packager_commit':subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()}
     raw=(json.dumps(manifest,indent=2)+'\n').encode()
     (destination/'release-download.json').write_bytes(raw)
     template=pathlib.Path('scripts/Get-OmarchyISO.ps1.in').read_text()

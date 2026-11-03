@@ -37,5 +37,13 @@ prereleases must be clearly labelled and must not be used as protected installer
 Production publication additionally requires validated disk protection, a full
 installation and Secure Boot support. These production gates remain closed.
 
+The approved lightweight tag must point at the successful build commit before
+dispatching the release. GitHub's workflow token cannot create a release at an
+older commit that changes workflow files relative to the default branch. Creating
+the tag through the maintainer's normal Git/CLI session avoids storing a broad
+personal token in Actions. The release job verifies the tag and prepares its
+private draft before transferring large artifacts, so permission problems fail
+early. The manifest records both the image identity and packager commit.
+
 Sources: [previous release](https://github.com/lachthox/OmarchyInstaller/releases/tag/v0.1.11),
 [GitHub release limits](https://docs.github.com/en/repositories/releasing-projects-on-github/about-releases).

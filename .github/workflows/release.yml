@@ -38,12 +38,15 @@ jobs:
           [[ "$BUILD_RUN" =~ ^[0-9]+$ ]]
           [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$ ]]
           gh api "repos/$GH_REPO/actions/runs/$BUILD_RUN" > run.json
+          gh api "repos/$GH_REPO/git/ref/tags/$RELEASE_TAG" > tag.json
           python3 - <<'PY'
           import json,os
           r=json.load(open('run.json'))
           assert r['conclusion']=='success' and r['head_branch']=='main'
           assert r['repository']['full_name']==os.environ['GH_REPO']
           assert r['path']=='.github/workflows/build-iso.yml'
+          t=json.load(open('tag.json'))
+          assert t['object']['type']=='commit' and t['object']['sha']==r['head_sha'], 'Create a lightweight release tag at the verified build commit first'
           with open(os.environ['GITHUB_OUTPUT'],'a') as f: f.write('source_sha='+r['head_sha']+'\n')
           PY
   publish:
@@ -54,6 +57,20 @@ jobs:
       contents: write
       actions: read
     steps:
+      - name: Prepare private draft before transferring the ISO
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ inputs.tag }}
+          RELEASE_KIND: ${{ inputs.release_kind }}
+        run: |
+          if gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft > /tmp/draft-state 2>/dev/null; then
+            [[ $(cat /tmp/draft-state) == true ]] || { echo 'Refusing to modify an already published release'; exit 1; }
+          else
+            flags=()
+            if [[ "$RELEASE_KIND" == diagnostic ]]; then flags+=(--prerelease); fi
+            gh release create "$RELEASE_TAG" --draft --verify-tag "${flags[@]}" --title "$RELEASE_TAG" --notes 'Verified image packaging in progress.'
+          fi
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
@@ -107,8 +124,6 @@ jobs:
           warning='DIAGNOSTIC PRERELEASE: not a protected installer. Secure Boot and GPU unlock are not enabled. Do not install on physical hardware.\n\n' if os.environ['RELEASE_KIND']=='diagnostic' else ''
           (root/'release-notes.md').write_text(warning+'Official Omarchy '+m['upstream']['version']+' derivative.\n\nDownload Get-OmarchyISO.ps1, then run it with PowerShell. It downloads the split GitHub assets, checks each part, reconstructs one ISO and verifies its full SHA256. Open that ISO in Rufus. Allow about twice the ISO size in free space during reconstruction; cached parts are removed after success.\n\nBuild commit: '+m['commit']+'\n\nThe source ISO boot structures are retained. Physical firmware, BitLocker and Vanguard compatibility require separate validation. See repository installation and recovery documentation.\n')
           PY
-          flags=()
-          if [[ "$RELEASE_KIND" == diagnostic ]]; then flags+=(--prerelease); fi
-          gh release create "$RELEASE_TAG" --draft "${flags[@]}" --target "$SOURCE_SHA" --title "$RELEASE_TAG" --notes-file release-assets/release-notes.md
+          gh release edit "$RELEASE_TAG" --notes-file release-assets/release-notes.md
           gh release upload "$RELEASE_TAG" release-assets/*
           gh release edit "$RELEASE_TAG" --draft=false
