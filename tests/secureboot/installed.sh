@@ -40,8 +40,26 @@ signed_boot signed-current
 # Only the disposable target image is edited. The ESP starts at sector 2048.
 esp=work/vm/target.raw@@1048576
 mcopy -i "$esp" ::/EFI/Linux/omarchy-current.efi work/vm/current.efi
-printf 'tampered embedded initramfs\n' > work/vm/tamper
-objcopy --update-section .initrd=work/vm/tamper work/vm/current.efi work/vm/tampered.efi
+python3 - <<'PY'
+import pathlib, struct
+data = bytearray(pathlib.Path('work/vm/current.efi').read_bytes())
+pe = struct.unpack_from('<I', data, 0x3c)[0]
+assert data[pe:pe+4] == b'PE\0\0'
+count = struct.unpack_from('<H', data, pe+6)[0]
+optional = struct.unpack_from('<H', data, pe+20)[0]
+sections = pe+24+optional
+matches = []
+for index in range(count):
+    offset = sections+index*40
+    if data[offset:offset+8].rstrip(b'\0') == b'.initrd':
+        size, raw = struct.unpack_from('<II', data, offset+16)
+        assert size and raw+size <= len(data)
+        matches.append(raw)
+assert len(matches) == 1
+# Keep the PE layout and signature table intact: fail authentication, not parsing.
+data[matches[0]] ^= 1
+pathlib.Path('work/vm/tampered.efi').write_bytes(data)
+PY
 mcopy -o -i "$esp" work/vm/tampered.efi ::/EFI/BOOT/grubx64.efi
 cp work/vm/signed-vars.fd work/vm/vars.fd
 set +e
