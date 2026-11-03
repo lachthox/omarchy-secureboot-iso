@@ -2,6 +2,7 @@
 import json
 import pathlib
 import subprocess
+import os
 
 root=pathlib.Path('work/vm/cidata')
 root.mkdir()
@@ -29,6 +30,7 @@ config={
         'mirror_regions':{},'optional_repositories':[]},
     'packages':['base-devel','git','omarchy-keyring','omarchy-settings','omarchy'],
     'profile_config':{'gfx_driver':None,'greeter':None,'profile':{}},'version':'3.0.9'}
+if os.environ.get('SCENARIO')=='interrupted': config['omarchy_install']['ci_interrupt']=True
 (root/'user_configuration.json').write_text(json.dumps(config,indent=2)+'\n')
 (root/'defer-provisioning').touch()
 subprocess.run(['xorriso','-as','mkisofs','-V','cidata','-J','-r','-o','work/vm/cidata.iso',str(root)],check=True)

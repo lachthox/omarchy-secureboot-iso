@@ -35,3 +35,7 @@ runs:
       if: inputs.full_install == 'true'
       shell: bash
       run: /usr/bin/time -v -o out/qemu/install-time.txt env SCENARIO=install ISO_PREVERIFIED=1 bash tests/qemu/boot.sh
+    - name: Interrupt an actual package-writing installation
+      if: inputs.full_install == 'true'
+      shell: bash
+      run: /usr/bin/time -v -o out/qemu/interrupted-time.txt env SCENARIO=interrupted ISO_PREVERIFIED=1 bash tests/qemu/boot.sh

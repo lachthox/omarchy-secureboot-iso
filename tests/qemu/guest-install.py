@@ -6,6 +6,7 @@ import pathlib
 import subprocess
 import sys
 import shutil
+import time
 
 sys.path.insert(0,str(pathlib.Path(__file__).resolve().parent))
 from importlib.util import spec_from_file_location, module_from_spec
@@ -23,6 +24,7 @@ def launch():
     subprocess.run(['/usr/local/bin/omarchy-cidata-load'],check=True)
     cfg=pathlib.Path('/root/user_configuration.json')
     config=json.loads(cfg.read_text())
+    interrupted=bool(config['omarchy_install'].get('ci_interrupt'))
     mods=config['disk_config']['device_modifications']
     assert len(mods)==1 and mods[0]['device']=='OMARCHY_CI_RESOLVE_BY_SERIAL'
     assert config['omarchy_install']['defer_provisioning'] and not config['custom_commands']
@@ -47,6 +49,8 @@ def launch():
     parts=fresh['OMARCHYTESTC'].get('children',[])
     assert len(parts)==2
     command=list(base)
+    unit='omarchy-ci-upstream-'+str(os.getpid())+'.service'
+    command+=['--unit='+unit]
     for serial,d in fresh.items():
         mode='rw' if serial=='OMARCHYTESTC' else 'r'
         for path in [d['name']]+[p['name'] for p in d.get('children',[])]:
@@ -60,17 +64,40 @@ def launch():
         '--setenv=OMARCHY_NVIM_PACKAGE=omarchy-nvim',
         '--setenv=OMARCHY_MIRROR='+pathlib.Path('/root/omarchy_mirror').read_text().strip(),
         '/usr/bin/python',str(pathlib.Path(__file__).resolve()),'--install-child']
-    subprocess.run(command,check=True)
+    if interrupted:
+        process=subprocess.Popen(command)
+        marker=pathlib.Path('/run/omarchy-ci-interrupt-ready')
+        deadline=time.monotonic()+180
+        try:
+            while not marker.exists() and process.poll() is None and time.monotonic()<deadline: time.sleep(0.1)
+            assert marker.exists(), 'Installer did not reach a real target filesystem write'
+            subprocess.run(['systemctl','kill','--kill-whom=all','--signal=SIGKILL',unit],check=True)
+            assert process.wait(timeout=20)!=0, 'Interrupted installer unexpectedly returned success'
+        finally:
+            if process.poll() is None:
+                subprocess.run(['systemctl','kill','--kill-whom=all','--signal=SIGKILL',unit],check=False)
+                process.wait(timeout=20)
+    else:
+        subprocess.run(command,check=True)
     windows_after=[line for line in subprocess.check_output(['efibootmgr','-v'],text=True).splitlines() if 'Windows Boot Manager' in line]
     assert windows_after==windows_before, 'Synthetic Windows EFI boot entry changed'
     print('WINDOWS_NVRAM_ENTRY_PRESERVED',flush=True)
-    print('GUARDED_UPSTREAM_INSTALL_OK',flush=True)
+    print('INTERRUPTED_INSTALL_TARGET_ONLY' if interrupted else 'GUARDED_UPSTREAM_INSTALL_OK',flush=True)
 
 
 def child():
     guard.child() # verifies real denied writes in the same cgroup as the installer
-    subprocess.run(['/usr/local/bin/omarchy-iso-install','--config','/root/user_configuration.json',
-        '--creds','/root/user_credentials.json','--defer-provisioning-file','/root/defer-provisioning'],check=True)
+    command=['/usr/local/bin/omarchy-iso-install','--config','/root/user_configuration.json',
+        '--creds','/root/user_credentials.json','--defer-provisioning-file','/root/defer-provisioning']
+    if json.loads(pathlib.Path('/root/user_configuration.json').read_text())['omarchy_install'].get('ci_interrupt'):
+        process=subprocess.Popen(command)
+        while process.poll() is None:
+            if pathlib.Path('/mnt/etc/os-release').exists():
+                pathlib.Path('/run/omarchy-ci-interrupt-ready').write_text('target filesystem received package files\n')
+                while True: time.sleep(1) # parent kills this entire device cgroup
+            time.sleep(0.1)
+        raise RuntimeError('Installer exited before interruption was requested')
+    subprocess.run(command,check=True)
     assert pathlib.Path('/mnt/boot/EFI/limine/limine_x64.efi').is_file()
     assert list(pathlib.Path('/mnt/boot/EFI/Linux').glob('*.efi'))
     # The installed-system probe is injected only into the synthetic target,

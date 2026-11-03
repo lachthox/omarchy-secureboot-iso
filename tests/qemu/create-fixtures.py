@@ -8,7 +8,7 @@ for name in ('windows-system.raw', 'windows-data.raw', 'target.raw'):
     p = root / name
     assert p.parent == root and not p.is_symlink()
     with p.open('xb') as f:
-        f.truncate(48*1024**3 if name=='target.raw' and os.environ.get('SCENARIO')=='install' else 256*1024*1024)
+        f.truncate(48*1024**3 if name=='target.raw' and os.environ.get('SCENARIO') in ('install','interrupted') else 256*1024*1024)
     if name != 'target.raw':
         subprocess.run(['sgdisk', '--clear', '--new=1:2048:0', '--typecode=1:'+('ef00' if name=='windows-system.raw' else '0700'), str(p)], check=True)
     if name != 'target.raw':

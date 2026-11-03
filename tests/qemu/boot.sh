@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 source scripts/common.sh
 cloud_only
-[[ $SCENARIO =~ ^(cdrom|usb|reordered|invalid|install)$ ]]
+[[ $SCENARIO =~ ^(cdrom|usb|reordered|invalid|install|interrupted)$ ]]
 report=out/qemu/$SCENARIO
 mkdir -p work/vm out/qemu
 mkdir -p "$report"
@@ -23,7 +23,7 @@ assert m.get('test_harness_protocol')==1, 'This image predates the fast test int
 print(json.dumps({'image_commit':m['commit'],'test_commit':subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()}))
 PY
 python3 tests/qemu/create-fixtures.py
-if [[ $SCENARIO == install ]]; then python3 tests/qemu/make-cidata.py; fi
+if [[ $SCENARIO == install || $SCENARIO == interrupted ]]; then python3 tests/qemu/make-cidata.py; fi
 sha256sum work/vm/windows-system.raw work/vm/windows-data.raw > "$report/protected-before.sha256"
 if [[ $SCENARIO == invalid ]]; then sha256sum work/vm/target.raw >> "$report/protected-before.sha256"; fi
 cp /usr/share/OVMF/OVMF_VARS_4M.fd work/vm/vars.fd
@@ -41,13 +41,13 @@ media=(-drive file=out/image/omarchy-custom-diagnostic.iso,media=cdrom,format=ra
 if [[ $SCENARIO == usb ]]; then
   media=(-device qemu-xhci -drive file=out/image/omarchy-custom-diagnostic.iso,format=raw,if=none,id=usb,readonly=on -device usb-storage,drive=usb,bootindex=1)
 fi
-if [[ $SCENARIO == install ]]; then
+if [[ $SCENARIO == install || $SCENARIO == interrupted ]]; then
   media+=(-drive file=work/vm/cidata.iso,media=cdrom,format=raw,readonly=on)
 fi
 accel=(-accel tcg -cpu max)
 if [[ -c /dev/kvm ]]; then sudo chmod a+rw /dev/kvm; accel=(-accel kvm -cpu host); fi
 set +e
-timeout "$([[ $SCENARIO == install ]] && echo 1800 || echo 180)" qemu-system-x86_64 -machine q35 "${accel[@]}" -m 8192 -smp 4 \
+timeout "$([[ $SCENARIO == install || $SCENARIO == interrupted ]] && echo 1800 || echo 180)" qemu-system-x86_64 -machine q35 "${accel[@]}" -m 8192 -smp 4 \
   -drive if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.fd \
   -drive if=pflash,format=raw,file=work/vm/vars.fd \
   "${media[@]}" "${disks[@]}" -boot d -display none -serial "file:$report/serial.log" -monitor none -nic none -no-reboot \
@@ -68,7 +68,11 @@ grep -q 'OMARCHY_CUSTOM_UEFI_BOOT_OK' "$report/serial.log"
 grep -q 'UPSTREAM_INSTALLER_AND_CIDATA_PRESENT' "$report/serial.log"
 grep -q 'CURRENT_CI_HARNESS_LOADED' "$report/serial.log"
 grep -q 'KERNEL_DEVICE_WRITE_BOUNDARY_OK' "$report/serial.log"
-if [[ $SCENARIO == install ]]; then
+if [[ $SCENARIO == interrupted ]]; then
+  grep -q INTERRUPTED_INSTALL_TARGET_ONLY "$report/serial.log"
+  grep -q WINDOWS_NVRAM_ENTRY_PRESERVED "$report/serial.log"
+  printf 'Real package-writing installation killed; protected disks and Windows NVRAM unchanged.\n' > "$report/result.txt"
+elif [[ $SCENARIO == install ]]; then
   grep -q 'GUARDED_UPSTREAM_INSTALL_OK' "$report/serial.log"
   grep -q 'WINDOWS_NVRAM_ENTRY_PRESERVED' "$report/serial.log"
   timeout 180 qemu-system-x86_64 -machine q35 "${accel[@]}" -m 8192 -smp 4 \
