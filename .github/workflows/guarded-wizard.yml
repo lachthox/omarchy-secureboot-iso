@@ -25,6 +25,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: python3 scripts/download-artifact.py --repository "$GITHUB_REPOSITORY" --run 41615225482 --destination out/image
       - run: (cd out/image && sha256sum -c SHA256SUMS)
+      - name: Read-only hardware-validation entry and actual kernel write denials
+        run: env SCENARIO=wizard-audit ISO_PREVERIFIED=1 bash tests/qemu/boot.sh
       - name: Actual wizard, upstream installation and installed boot
         run: env SCENARIO=wizard ISO_PREVERIFIED=1 bash tests/qemu/boot.sh
       - name: Encrypted descendant boundary and passphrase boot

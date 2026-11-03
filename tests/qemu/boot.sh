@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 source scripts/common.sh
 cloud_only
-[[ $SCENARIO =~ ^(cdrom|usb|reordered|invalid|install|interrupted|wizard|wizard-encrypted|wizard-interrupted)$ ]]
+[[ $SCENARIO =~ ^(cdrom|usb|reordered|invalid|install|interrupted|wizard|wizard-encrypted|wizard-interrupted|wizard-audit)$ ]]
 report=out/qemu/$SCENARIO
 mkdir -p work/vm out/qemu
 mkdir -p "$report"
@@ -30,7 +30,7 @@ if [[ $SCENARIO == wizard* ]]; then
   xorriso -as mkisofs -V "$SCENARIO" -o work/vm/wizard.iso work/vm/wizard
 fi
 sha256sum work/vm/windows-system.raw work/vm/windows-data.raw > "$report/protected-before.sha256"
-if [[ $SCENARIO == invalid ]]; then sha256sum work/vm/target.raw >> "$report/protected-before.sha256"; fi
+if [[ $SCENARIO == invalid || $SCENARIO == wizard-audit ]]; then sha256sum work/vm/target.raw >> "$report/protected-before.sha256"; fi
 cp /usr/share/OVMF/OVMF_VARS_4M.fd work/vm/vars.fd
 target_serial=OMARCHYTESTC
 if [[ $SCENARIO == invalid ]]; then target_serial=UNRECOGNIZED; fi
@@ -41,6 +41,12 @@ if [[ $SCENARIO == reordered ]]; then
   disks=(-drive file=work/vm/target.raw,format=raw,if=none,id=c -device virtio-blk-pci,drive=c,serial=OMARCHYTESTC
          -drive file=work/vm/windows-data.raw,format=raw,if=none,id=b -device virtio-blk-pci,drive=b,serial=WINDOWS_B
          -drive file=work/vm/windows-system.raw,format=raw,if=none,id=a -device virtio-blk-pci,drive=a,serial=WINDOWS_A)
+fi
+if [[ $SCENARIO == wizard* ]]; then
+  disks=(-device virtio-scsi-pci,id=scsi
+    -drive file=work/vm/windows-system.raw,format=raw,if=none,id=a -device scsi-hd,drive=a,bus=scsi.0,serial=WINDOWS_A,vendor=Samsung,product="990 PRO 2TB"
+    -drive file=work/vm/windows-data.raw,format=raw,if=none,id=b -device scsi-hd,drive=b,bus=scsi.0,serial=WINDOWS_B,vendor=WDC,product=WDS100T2B0B
+    -drive file=work/vm/target.raw,format=raw,if=none,id=c -device scsi-hd,drive=c,bus=scsi.0,serial=OMARCHYTESTC,vendor=Crucial,product=CT1000BX500SSD1)
 fi
 media=(-drive file=out/image/omarchy-custom-diagnostic.iso,media=cdrom,format=raw,readonly=on)
 if [[ $SCENARIO == usb ]]; then
@@ -75,7 +81,11 @@ grep -q 'OMARCHY_CUSTOM_UEFI_BOOT_OK' "$report/serial.log"
 grep -q 'UPSTREAM_INSTALLER_AND_CIDATA_PRESENT' "$report/serial.log"
 grep -q 'CURRENT_CI_HARNESS_LOADED' "$report/serial.log"
 if [[ $SCENARIO != wizard* ]]; then grep -q 'KERNEL_DEVICE_WRITE_BOUNDARY_OK' "$report/serial.log"; fi
-if [[ $SCENARIO == interrupted || $SCENARIO == wizard-interrupted ]]; then
+if [[ $SCENARIO == wizard-audit ]]; then
+  grep -q READ_ONLY_HARDWARE_VALIDATION_COMPLETE "$report/serial.log"
+  grep -q AUDIT_KERNEL_DENIED_ALL_DISK_WRITES "$report/serial.log"
+  printf 'Actual audit launcher and wizard passed; every synthetic disk byte unchanged.\n' > "$report/result.txt"
+elif [[ $SCENARIO == interrupted || $SCENARIO == wizard-interrupted ]]; then
   if [[ $SCENARIO == wizard-interrupted ]]; then
     grep -q GUARDED_WIZARD_INTERRUPTION_OK "$report/serial.log"
     grep -q GUARDED_FIRMWARE_VARIABLES_UNCHANGED "$report/serial.log"

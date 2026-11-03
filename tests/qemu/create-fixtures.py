@@ -9,7 +9,7 @@ for name in ('windows-system.raw', 'windows-data.raw', 'target.raw'):
     assert p.parent == root and not p.is_symlink()
     with p.open('xb') as f:
         scenario = os.environ.get('SCENARIO','')
-        f.truncate(48*1024**3 if name=='target.raw' and (scenario in ('install','interrupted') or scenario.startswith('wizard')) else 256*1024*1024)
+        f.truncate(48*1024**3 if name=='target.raw' and (scenario in ('install','interrupted') or (scenario.startswith('wizard') and scenario!='wizard-audit')) else 256*1024*1024)
     if name != 'target.raw':
         subprocess.run(['sgdisk', '--clear', '--new=1:2048:0', '--typecode=1:'+('ef00' if name=='windows-system.raw' else '0700'), str(p)], check=True)
     if name != 'target.raw':

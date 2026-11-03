@@ -82,14 +82,17 @@ def main():
             raise InvalidBootImage('Integrity flags must be managed by the signing service')
         cmdline += ' module.sig_enforce=1 lockdown=integrity'
         (tmp/'cmdline').write_text(cmdline+'\n')
-        subprocess.run(['mkinitcpio', '-k', version, '-g', str(tmp/'initrd')], check=True)
+        if args.initialize_stock_recovery and any(w.startswith('gpu_unlock.targets=') for w in cmdline.split()):
+            raise InvalidBootImage('Initial recovery must use the stock GPU configuration')
+        signed_kernel = tmp/'signed-kernel'
+        subprocess.run(['sbsign','--key',str(KEYS/'MOK.key'),'--cert',str(KEYS/'MOK.pem'),
+                        '--output',str(signed_kernel),'/usr/lib/modules/'+version+'/vmlinuz'],check=True)
+        unsigned = tmp/'unsigned.efi'
+        subprocess.run(['mkinitcpio','-k',version,'-U',str(unsigned),'--kernelimage',str(signed_kernel),
+                        '--cmdline',str(tmp/'cmdline'),'--no-ukify','--nopost'],check=True)
         candidate = tmp/'candidate.efi'
-        subprocess.run(['ukify', 'build', '--linux=/usr/lib/modules/'+version+'/vmlinuz',
-                        '--initrd='+str(tmp/'initrd'), '--cmdline=@'+str(tmp/'cmdline'),
-                        '--os-release=@/etc/os-release', '--sign-kernel',
-                        '--secureboot-private-key='+str(KEYS/'MOK.key'),
-                        '--secureboot-certificate='+str(KEYS/'MOK.pem'),
-                        '--output='+str(candidate)], check=True)
+        subprocess.run(['sbsign','--key',str(KEYS/'MOK.key'),'--cert',str(KEYS/'MOK.pem'),
+                        '--output',str(candidate),str(unsigned)],check=True)
         result = publish(esp, candidate, verify_uki, initialize=args.initialize_stock_recovery)
         (base/'last-signed-update.json').write_text(json.dumps(result, indent=2)+'\n')
         print('Signed update published. The separate recovery image was preserved.')
