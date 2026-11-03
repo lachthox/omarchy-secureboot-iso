@@ -1,13 +1,14 @@
 """Regular files only. No host block device, loop device, or mount access."""
 import pathlib
 import subprocess
+import os
 
 root = pathlib.Path('work/vm').resolve()
 for name in ('windows-system.raw', 'windows-data.raw', 'target.raw'):
     p = root / name
     assert p.parent == root and not p.is_symlink()
     with p.open('xb') as f:
-        f.truncate(256*1024*1024)
+        f.truncate(48*1024**3 if name=='target.raw' and os.environ.get('SCENARIO')=='install' else 256*1024*1024)
     subprocess.run(['sgdisk', '--clear', '--new=1:2048:0', '--typecode=1:'+('ef00' if name=='windows-system.raw' else '0700'), str(p)], check=True)
     if name != 'target.raw':
         # Simulated ESP/data, explicitly not a real Windows installation.

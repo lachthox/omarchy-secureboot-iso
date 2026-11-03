@@ -1,0 +1,9 @@
+{
+  "repository": "https://github.com/Zagitta/gpu-unlock",
+  "revision": "7eb51bccae0a0b7e599e084d971170e9a1e82d0c",
+  "version": "2.0.0",
+  "allowed_pci_ids": ["10de:2484", "10de:2488"],
+  "enabled_by_default": false,
+  "hardware_validation": "pending",
+  "secure_boot_validation": "pending"
+}

@@ -1,0 +1,21 @@
+name: Test existing ISO without downloading it
+description: Run QEMU against the ISO already in the runner workspace
+inputs:
+  full_install:
+    description: Include slower upstream unattended installation
+    default: 'false'
+runs:
+  using: composite
+  steps:
+    - name: Verify once and run local VM scenarios
+      shell: bash
+      env:
+        FULL_INSTALL: ${{ inputs.full_install }}
+      run: |
+        (cd out/image && sha256sum -c SHA256SUMS)
+        for scenario in cdrom usb reordered; do
+          SCENARIO="$scenario" ISO_PREVERIFIED=1 bash tests/qemu/boot.sh
+        done
+        if [[ "$FULL_INSTALL" == true ]]; then
+          SCENARIO=install ISO_PREVERIFIED=1 bash tests/qemu/boot.sh
+        fi
