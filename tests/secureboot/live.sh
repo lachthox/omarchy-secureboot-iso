@@ -19,7 +19,7 @@ trap cleanup EXIT
 umask 077
 openssl req -new -x509 -newkey rsa:3072 -nodes -days 1 -subj '/CN=Ephemeral Omarchy live CI only/' -keyout "$root/owner.key" -out "$root/owner.pem"
 /usr/lib/systemd/ukify build --linux="$root/vmlinuz" --initrd="$root/authenticated-initrd" \
-  --cmdline="@$root/cmdline" --os-release="@$root/os-release" --sign-kernel=yes \
+  --cmdline="@$root/cmdline" --os-release="@$root/os-release" --sign-kernel \
   --secureboot-private-key="$root/owner.key" --secureboot-certificate="$root/owner.pem" --output="$root/live.efi"
 sbverify --cert "$root/owner.pem" "$root/live.efi"
 work/secureboot-tools/bin/virt-fw-vars --input /usr/share/OVMF/OVMF_VARS_4M.ms.fd \

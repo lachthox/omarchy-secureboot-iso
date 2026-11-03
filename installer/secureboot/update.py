@@ -86,7 +86,7 @@ def main():
         candidate = tmp/'candidate.efi'
         subprocess.run(['ukify', 'build', '--linux=/usr/lib/modules/'+version+'/vmlinuz',
                         '--initrd='+str(tmp/'initrd'), '--cmdline=@'+str(tmp/'cmdline'),
-                        '--os-release=@/etc/os-release', '--sign-kernel=yes',
+                        '--os-release=@/etc/os-release', '--sign-kernel',
                         '--secureboot-private-key='+str(KEYS/'MOK.key'),
                         '--secureboot-certificate='+str(KEYS/'MOK.pem'),
                         '--output='+str(candidate)], check=True)
