@@ -1,0 +1,9 @@
+{
+  "version": "4.0.6",
+  "url": "https://iso.omarchy.org/omarchy-4.0.6.iso",
+  "sha256": "b542db5fecc37395d9af6654a8146ebed225f275ae4d5a6fcf432e40afe7bb88",
+  "signing_fingerprint": "40DFB630FF42BCFFB047046CF0134EE680CAC571",
+  "release_api": "https://api.github.com/repos/omacom/omarchy/releases/tags/v4.0.6",
+  "source_revision": "ef1d3897f63f2e0104e461f7bf0d4bb0456168c9",
+  "source_revision_note": "Research snapshot; ISO-contained installer hashes are authoritative, not this later source snapshot."
+}

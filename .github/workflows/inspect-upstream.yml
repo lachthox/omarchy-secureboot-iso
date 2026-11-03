@@ -1,0 +1,42 @@
+name: Inspect official Omarchy ISO
+on:
+  workflow_dispatch:
+  workflow_call:
+permissions:
+  contents: read
+concurrency:
+  group: inspect-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  inspect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Install analysis tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends xorriso squashfs-tools fdisk mtools dosfstools gnupg jq time
+      - name: Measure runner and check space
+        run: source scripts/common.sh; preflight
+      - id: source
+        run: echo "sha=$(jq -r .sha256 configs/upstream.json)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: work/source/upstream.iso
+          key: official-omarchy-sha256-${{ steps.source.outputs.sha }}
+      - name: Authenticate official ISO
+        run: /usr/bin/time -v -o out/download-time.txt bash scripts/download-upstream.sh
+      - name: Inspect inert files
+        run: /usr/bin/time -v -o out/inspection-time.txt bash scripts/inspect-iso.sh
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: upstream-inspection-${{ github.run_id }}
+          path: out/
+          retention-days: 14
+      - name: Cleanup extracted data
+        if: always()
+        run: sudo rm -rf -- work/iso

@@ -1,0 +1,16 @@
+.research/
+upstream-tree.txt
+previous-tree.txt
+upstream-release.json
+work/
+out/
+__pycache__/
+*.pyc
+*.iso
+*.qcow2
+*.raw
+*.img
+*.key
+*.pem
+*.p12
+*.pfx
