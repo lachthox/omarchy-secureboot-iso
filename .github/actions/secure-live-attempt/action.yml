@@ -1,0 +1,29 @@
+name: Reuse runner-local ISO for a signed-live test iteration
+description: Test one recorded source revision and publish only its small reports
+inputs:
+  attempt:
+    required: true
+    description: Attempt number
+outputs:
+  outcome:
+    description: Actual test result
+    value: ${{ steps.boot.outcome }}
+runs:
+  using: composite
+  steps:
+    - id: boot
+      continue-on-error: true
+      shell: bash
+      run: |
+        source scripts/common.sh
+        cloud_only
+        rm -rf -- work/secure-live out/secure-live work/vm
+        mkdir -p out/secure-live
+        git rev-parse HEAD > out/secure-live/test-source.sha
+        bash tests/secureboot/live.sh
+    - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+      if: always()
+      with:
+        name: actual-secure-live-attempt-${{ inputs.attempt }}
+        path: out/secure-live/
+        retention-days: 14
