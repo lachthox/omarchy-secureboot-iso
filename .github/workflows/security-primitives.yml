@@ -18,8 +18,8 @@ jobs:
       - run: bash scripts/install-tools.sh build
       - name: Discover EFI development tooling
         run: |
-          apt-cache policy gnu-efi python3-cryptography python3-yaml python3-requests
-          sudo apt-get install -y --no-install-recommends gnu-efi=3.0.18-1
+          apt-cache policy systemd-boot-efi systemd-ukify shim-signed
+          sudo apt-get install -y --no-install-recommends gnu-efi=3.0.15-1build1 python3-cryptography=41.0.7-4ubuntu0.4 python3-yaml=6.0.1-2build2 python3-requests=2.31.0+dfsg-1ubuntu1.2
           python3 -m venv --system-site-packages work/secureboot-tools
           work/secureboot-tools/bin/pip install --no-deps virt-firmware==26.10 pefile==2024.8.26
           work/secureboot-tools/bin/python -c 'import cryptography, yaml, requests, pefile'
