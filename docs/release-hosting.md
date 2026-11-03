@@ -1,39 +1,41 @@
-# Single-file ISO hosting
+# GitHub Releases, without a storage bucket
 
-The selected release design hosts one ISO in S3-compatible object storage and
-links it from GitHub Releases. GitHub's individual asset limit is 2 GiB; the
-6.5 GB ISO cannot be attached there directly. Development artifacts remain in
-Actions until the production acceptance gates pass.
+The original OmarchyInstaller release uploaded a 1,629,945,856-byte ISO directly
+to GitHub. The official Omarchy derivative is about 6.5 GB, beyond GitHub's
+2 GiB limit per asset. The selected design keeps all hosting on GitHub:
 
-Configure the following in **Settings → Secrets and variables → Actions**:
+1. Actions verifies the successful build/test run and the ISO checksum.
+2. It splits the ISO into parts no larger than 1,500,000,000 bytes.
+3. It generates a manifest containing the full and per-part SHA256 checksums.
+4. It generates `Get-OmarchyISO.ps1`, with the manifest hash embedded.
+5. It uploads every asset to a draft release, then publishes it.
 
-| Type | Name | Value |
-| --- | --- | --- |
-| Variable | `RELEASE_BUCKET` | Dedicated release bucket name |
-| Variable | `RELEASE_PUBLIC_BASE_URL` | HTTPS public download base, without bucket/key suffix |
-| Variable | `RELEASE_S3_ENDPOINT` | HTTPS S3 API endpoint; empty for AWS S3 |
-| Variable | `RELEASE_REGION` | AWS region, or `auto` for Cloudflare R2 |
-| Secret | `RELEASE_ACCESS_KEY_ID` | Bucket-scoped object upload key ID |
-| Secret | `RELEASE_SECRET_ACCESS_KEY` | Corresponding secret |
+Download the helper from the release and run:
 
-Create a bucket-scoped credential with only the object permissions required for
-multipart upload. Configure public access for this dedicated release bucket or
-its CDN domain outside the workflow. No account credentials should be pasted
-into chat or committed. Cloudflare R2, AWS S3 and compatible services can use
-this interface; actual access has not yet been configured or tested.
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\Get-OmarchyISO.ps1
+```
 
-`release.yml` verifies the successful build run, matching commit and checksum,
-and production acceptance metadata. It downloads the artifact once, uploads to
-a versioned SHA256-addressed key, then streams the public object back **on the
-cloud runner** to verify the actual public bytes. Only after that does it publish
-the GitHub release and small checksum/metadata assets. This extra release-time
-transfer protects the published artifact and is outside the quick test loop.
+It downloads and verifies the parts, joins their bytes into one ISO, checks the
+full SHA256 and renames it to its final `.iso` name only on success. Cached parts
+allow retrying a download without obtaining every part again. It never overwrites
+a different existing ISO. It removes its downloaded parts after success unless
+`-KeepParts` is supplied. Allow about twice the ISO size in free space. This is
+file reconstruction, not ISO extraction, modification or rebuilding.
 
-The workflow never changes bucket-wide access policies or provisions billable
-resources. Credentials are scoped to the upload step. Incomplete multipart
-uploads should have a bucket lifecycle cleanup policy. Enable bucket versioning
-or object lock where supported if stronger publication immutability is needed.
+`-OutputDirectory` chooses where the ISO is written. For manually downloaded
+assets, `-LocalAssetsDirectory` reads the manifest and parts from that directory.
+The same checksum rules apply. No administrator rights, storage credentials,
+partition access or USB flashing operations are used by the helper.
 
-Sources: [GitHub release limits](https://docs.github.com/en/repositories/releasing-projects-on-github/about-releases),
-[Cloudflare R2 S3 setup](https://developers.cloudflare.com/r2/get-started/s3/),
-[AWS CLI object copy](https://docs.aws.amazon.com/cli/latest/reference/s3/cp.html).
+The generated helper is tested on a GitHub-hosted Windows runner using small
+synthetic files: exact reconstruction, repeat execution, corrupt parts, altered
+manifests, an existing conflicting ISO and final-hash failure cleanup.
+
+`release.yml` supports diagnostic prereleases and production releases. Diagnostic
+prereleases must be clearly labelled and must not be used as protected installers.
+Production publication additionally requires validated disk protection, a full
+installation and Secure Boot support. These production gates remain closed.
+
+Sources: [previous release](https://github.com/lachthox/OmarchyInstaller/releases/tag/v0.1.11),
+[GitHub release limits](https://docs.github.com/en/repositories/releasing-projects-on-github/about-releases).

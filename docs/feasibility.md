@@ -51,10 +51,12 @@ recorded, not claimed to be immutable or byte-reproducible across image updates.
 
 GitHub Releases limits a single asset to 2 GiB (see its storage/bandwidth quota
 documentation). This ISO exceeds that. A single directly flashable ISO needs
-approved external object hosting linked from the release, or a different
-distribution channel. Split assets need reconstruction and do not meet the
-requested download-to-Rufus experience. Actions artifacts can retain the proof
-image, but are not a public release CDN.
+external object hosting, or reconstruction from multiple release assets. After
+reviewing the original repository's 1.63 GB release, the selected approach is
+GitHub-hosted parts plus a Windows download helper. The helper produces one
+checksum-verified ISO for Rufus; this adds one explicit step to the original
+download-to-Rufus flow. No external bucket is required. Actions artifacts also
+retain proof images but are not a permanent public release CDN.
 
 The official ISO Secure Boot plan is a proposal, not evidence of a shipped
 Microsoft-trusted chain. Signing a custom EFI file or a UKI does not make a

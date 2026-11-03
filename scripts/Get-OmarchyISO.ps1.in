@@ -1,4 +1,4 @@
-# Reconstruct the published ISO from GitHub release assets. No disk/USB access.
+# Reconstruct the published ISO from GitHub assets. No block-device or USB flashing operations.
 [CmdletBinding()]
 param(
     [string]$OutputDirectory = $PSScriptRoot,
