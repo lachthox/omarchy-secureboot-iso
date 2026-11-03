@@ -19,7 +19,7 @@ jobs:
       - name: Record and install Secure Boot UKI tools
         run: |
           apt-cache policy systemd-boot-efi systemd-ukify zstd
-          sudo apt-get install -y --no-install-recommends systemd-boot-efi systemd-ukify zstd
+          sudo apt-get install -y --no-install-recommends systemd-boot-efi=255.4-1ubuntu8.18 systemd-ukify=255.4-1ubuntu8.18 zstd
           python3 -m venv --system-site-packages work/secureboot-tools
           work/secureboot-tools/bin/pip install --no-deps virt-firmware==26.10 pefile==2024.8.26
       - name: Download existing image once

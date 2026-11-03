@@ -23,7 +23,7 @@ from policy import Refused, identity, revalidate
 HERE = pathlib.Path(__file__).resolve()
 BASE = ['systemd-run', '--quiet', '--wait', '--pipe', '--collect',
         '--property=DevicePolicy=closed', '--property=NoNewPrivileges=yes',
-        '--property=ProtectControlGroups=yes', '--property=PrivatePIDs=yes',
+        '--property=ProtectControlGroups=yes', '--property=PrivatePIDs=yes', '--property=PrivateMounts=yes',
         '--property=SystemCallFilter=~bpf ptrace process_vm_readv process_vm_writev',
         '--property=CapabilityBoundingSet=~CAP_SYS_RAWIO CAP_SYS_PTRACE CAP_SYS_MODULE CAP_BPF CAP_PERFMON']
 
@@ -270,6 +270,10 @@ def writer():
             # Accepted only after the harness confirms its read-only share and
             # exact VM disk identities. Never reachable in a physical session.
             import shutil
+            if mapper:
+                pathlib.Path('/mnt/etc/limine-entry-tool.d/98-ci-serial.conf').write_text(
+                    'KERNEL_CMDLINE[default]+=" console=ttyS0,115200 disablehooks=plymouth plymouth.enable=0"\n')
+                subprocess.run(['arch-chroot', '/mnt', 'limine-update'], check=True)
             probe = pathlib.Path('/mnt/usr/local/lib/omarchy-ci-installed-boot')
             probe.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(payload['ci_probe'], probe); probe.chmod(0o755)

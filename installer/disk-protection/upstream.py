@@ -40,4 +40,10 @@ def apply():
     replace('/usr/share/omarchy-iso/orchestrator/phases_impl.py',
             'c43a393c99b90d458e85ad91de2ddc31ba687960844d4314709a386229767e34', [(
                 '    _register_limine_efi_entry(disk, part, loader, pre_state=pre_state)',
-                '    # Guarded installation: firmware registration is deliberately omitted.', 1)])
+                '    # Guarded installation: firmware registration is deliberately omitted.', 1), (
+                '''        post = _read_efibootmgr()
+        if not _find_label_entries(post["entries"], "Limine"):
+            raise RuntimeError("no 'Limine' entry registered in efibootmgr")''',
+                '''        fallback = esp_mount / "EFI" / "BOOT" / "BOOTX64.EFI"
+        if not fallback.is_file() or not fallback.stat().st_size:
+            raise RuntimeError("Target-local fallback EFI loader is missing")''', 1)])

@@ -21,8 +21,8 @@ def acceptance():
     assert {d['serial'] for d in disks} == {'WINDOWS_A', 'WINDOWS_B', 'OMARCHYTESTC'}
     target = next(d for d in disks if d['serial'] == 'OMARCHYTESTC')
     assert target['size'] == 48*1024**3
-    return {'encrypted': os.environ.get('WIZARD_ENCRYPTED') == '1',
-            'ci_interrupt': os.environ.get('WIZARD_INTERRUPT') == '1',
+    return {'encrypted': pathlib.Path('/dev/disk/by-label/wizard-encrypted').exists(),
+            'ci_interrupt': pathlib.Path('/dev/disk/by-label/wizard-interrupted').exists(),
             'ci_probe': str(pathlib.Path(__file__).with_name('installed-boot.sh'))}
 
 def inventory():

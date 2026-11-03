@@ -20,7 +20,7 @@ mkfs.fat -F32 -n OMARCHY_SB "$root/esp.img"
 mmd -i "$root/esp.img" ::/EFI ::/EFI/BOOT
 mcopy -i "$root/esp.img" "$root/live.efi" ::/EFI/BOOT/BOOTX64.EFI
 SCENARIO=cdrom python3 tests/qemu/create-fixtures.py
-sha256sum work/vm/windows-system.raw work/vm/windows-data.raw work/vm/target.raw > out/secure-live/before.sha256
+sha256sum work/vm/windows-system.raw work/vm/windows-data.raw > out/secure-live/before.sha256
 accel=(-accel tcg -cpu max)
 if [[ -c /dev/kvm ]]; then sudo chmod a+rw /dev/kvm; accel=(-accel kvm -cpu host); fi
 cp "$root/vars-template.fd" "$root/vars.fd"
