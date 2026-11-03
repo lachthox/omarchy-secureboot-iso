@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 source scripts/common.sh
 cloud_only
-[[ $SCENARIO =~ ^(cdrom|usb|reordered|invalid|install|interrupted)$ ]]
+[[ $SCENARIO =~ ^(cdrom|usb|reordered|invalid|install|interrupted|wizard)$ ]]
 report=out/qemu/$SCENARIO
 mkdir -p work/vm out/qemu
 mkdir -p "$report"
@@ -24,6 +24,11 @@ print(json.dumps({'image_commit':m['commit'],'test_commit':subprocess.check_outp
 PY
 python3 tests/qemu/create-fixtures.py
 if [[ $SCENARIO == install || $SCENARIO == interrupted ]]; then python3 tests/qemu/make-cidata.py; fi
+if [[ $SCENARIO == wizard ]]; then
+  mkdir -p work/vm/wizard
+  printf 'Synthetic guarded-wizard acceptance\n' > work/vm/wizard/marker
+  xorriso -as mkisofs -V wizard -o work/vm/wizard.iso work/vm/wizard
+fi
 sha256sum work/vm/windows-system.raw work/vm/windows-data.raw > "$report/protected-before.sha256"
 if [[ $SCENARIO == invalid ]]; then sha256sum work/vm/target.raw >> "$report/protected-before.sha256"; fi
 cp /usr/share/OVMF/OVMF_VARS_4M.fd work/vm/vars.fd
@@ -45,13 +50,15 @@ if [[ $SCENARIO == install || $SCENARIO == interrupted ]]; then
   media+=(-drive file=work/vm/cidata.iso,media=cdrom,format=raw,readonly=on)
 fi
 accel=(-accel tcg -cpu max)
+if [[ $SCENARIO == wizard ]]; then media+=(-drive file=work/vm/wizard.iso,media=cdrom,format=raw,readonly=on); fi
 if [[ -c /dev/kvm ]]; then sudo chmod a+rw /dev/kvm; accel=(-accel kvm -cpu host); fi
 set +e
-timeout "$([[ $SCENARIO == install || $SCENARIO == interrupted ]] && echo 1800 || echo 180)" qemu-system-x86_64 -machine q35 "${accel[@]}" -m 8192 -smp 4 \
+timeout "$([[ $SCENARIO == install || $SCENARIO == interrupted || $SCENARIO == wizard ]] && echo 1800 || echo 180)" qemu-system-x86_64 -machine q35 "${accel[@]}" -m 8192 -smp 4 \
   -drive if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.fd \
   -drive if=pflash,format=raw,file=work/vm/vars.fd \
   "${media[@]}" "${disks[@]}" -boot d -display none -serial "file:$report/serial.log" -monitor none -nic none -no-reboot \
   -virtfs "local,path=$PWD/tests/qemu,mount_tag=omarchy-ci,security_model=none,readonly=on" \
+  -virtfs "local,path=$PWD/installer,mount_tag=omarchy-installer,security_model=none,readonly=on" \
   > "$report/qemu.log" 2>&1
 status=$?
 set -e
@@ -67,14 +74,20 @@ if grep -q OMARCHY_CI_FAILURE "$report/serial.log"; then exit 1; fi
 grep -q 'OMARCHY_CUSTOM_UEFI_BOOT_OK' "$report/serial.log"
 grep -q 'UPSTREAM_INSTALLER_AND_CIDATA_PRESENT' "$report/serial.log"
 grep -q 'CURRENT_CI_HARNESS_LOADED' "$report/serial.log"
-grep -q 'KERNEL_DEVICE_WRITE_BOUNDARY_OK' "$report/serial.log"
+if [[ $SCENARIO != wizard ]]; then grep -q 'KERNEL_DEVICE_WRITE_BOUNDARY_OK' "$report/serial.log"; fi
 if [[ $SCENARIO == interrupted ]]; then
   grep -q INTERRUPTED_INSTALL_TARGET_ONLY "$report/serial.log"
   grep -q WINDOWS_NVRAM_ENTRY_PRESERVED "$report/serial.log"
   printf 'Real package-writing installation killed; protected disks and Windows NVRAM unchanged.\n' > "$report/result.txt"
-elif [[ $SCENARIO == install ]]; then
-  grep -q 'GUARDED_UPSTREAM_INSTALL_OK' "$report/serial.log"
-  grep -q 'WINDOWS_NVRAM_ENTRY_PRESERVED' "$report/serial.log"
+elif [[ $SCENARIO == install || $SCENARIO == wizard ]]; then
+  if [[ $SCENARIO == wizard ]]; then
+    grep -q ACTUAL_GUARDED_WIZARD_ACCEPTANCE_OK "$report/serial.log"
+    grep -q GUARDED_FIRMWARE_VARIABLES_UNCHANGED "$report/serial.log"
+    grep -q ACTUAL_WRITER_DENIED_PROTECTED_OPENS "$report/serial.log"
+  else
+    grep -q 'GUARDED_UPSTREAM_INSTALL_OK' "$report/serial.log"
+    grep -q 'WINDOWS_NVRAM_ENTRY_PRESERVED' "$report/serial.log"
+  fi
   timeout 180 qemu-system-x86_64 -machine q35 "${accel[@]}" -m 8192 -smp 4 \
     -drive if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.fd \
     -drive if=pflash,format=raw,file=work/vm/vars.fd "${disks[@]}" \

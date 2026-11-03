@@ -1,0 +1,6 @@
+{
+  "schema": 1,
+  "physical_installation_enabled": false,
+  "secure_boot_enforced": false,
+  "reason": "Signed live-root, installed-system, update and recovery acceptance is still pending."
+}

@@ -35,6 +35,10 @@ runs:
       if: inputs.full_install == 'true'
       shell: bash
       run: /usr/bin/time -v -o out/qemu/install-time.txt env SCENARIO=install ISO_PREVERIFIED=1 bash tests/qemu/boot.sh
+    - name: Actual guarded wizard and installed-system boot
+      if: inputs.full_install == 'true'
+      shell: bash
+      run: /usr/bin/time -v -o out/qemu/wizard-time.txt env SCENARIO=wizard ISO_PREVERIFIED=1 bash tests/qemu/boot.sh
     - name: Interrupt an actual package-writing installation
       if: inputs.full_install == 'true'
       shell: bash

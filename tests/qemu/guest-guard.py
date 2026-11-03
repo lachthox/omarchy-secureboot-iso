@@ -54,6 +54,12 @@ def child():
 
 
 def parent():
+    probe=pathlib.Path(__file__).with_name('security-probe.py')
+    if probe.exists():
+        subprocess.run([sys.executable,str(probe)],check=True)
+    if pathlib.Path('/dev/disk/by-label/wizard').exists():
+        subprocess.run([sys.executable,str(pathlib.Path(__file__).with_name('wizard-acceptance.py'))],check=True)
+        return
     disks=devices()
     command=['systemd-run','--quiet','--wait','--pipe','--collect',
         '--property=DevicePolicy=closed','--property=NoNewPrivileges=yes',
