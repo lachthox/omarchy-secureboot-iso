@@ -14,8 +14,10 @@ import update
 variables = pathlib.Path('/sys/firmware/efi/efivars')
 secure = list(variables.glob('SecureBoot-*'))
 setup = list(variables.glob('SetupMode-*'))
-assert len(secure) == len(setup) == 1
-enabled = secure[0].read_bytes()[4]
+assert len(secure) == len(setup) and len(secure) <= 1
+# Unprovisioned OVMF can omit both variables on the preparation boot.
+# Enforcing boots are independently required to emit the integrity marker.
+enabled = secure[0].read_bytes()[4] if secure else 0
 if enabled:
     assert setup[0].read_bytes()[4] == 0
     assert pathlib.Path('/sys/module/module/parameters/sig_enforce').read_text().strip() in ('Y', '1')
