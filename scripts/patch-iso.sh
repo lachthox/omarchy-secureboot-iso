@@ -10,7 +10,7 @@ sudo install -Dm644 configs/upstream.json work/rootfs/usr/share/omarchy-custom/u
 sudo mkdir -p work/rootfs/opt/omarchy-custom work/rootfs/usr/local/lib/omarchy-ci
 sudo cp -a installer configs work/rootfs/opt/omarchy-custom/
 sudo chown -R 0:0 work/rootfs/opt/omarchy-custom
-sudo install -m644 tests/qemu/guest-guard.py tests/qemu/guest-install.py work/rootfs/usr/local/lib/omarchy-ci/
+sudo install -m644 tests/qemu/guest-guard.py tests/qemu/guest-install.py tests/qemu/offline-keyboard.py work/rootfs/usr/local/lib/omarchy-ci/
 python3 scripts/patch-grub.py
 python3 - <<'PY'
 import hashlib,json,pathlib

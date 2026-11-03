@@ -22,8 +22,12 @@ This avoids three multi-gigabyte downloads and keeps guest RAM within the
 standard runner's capacity. Pure policy checks run independently.
 
 `test-iso.yml` is for standalone retesting: it downloads an artifact **once**,
-checks out that build's revision, then runs every selected scenario against the
-same local file. The slower full-install test is opt-in. Protected fixtures are
+uses the selected workflow revision's test harness, then runs every selected
+scenario against the same local file. Both the image and harness commits are
+recorded. A read-only virtio-9p share exposes only `tests/qemu` inside the VM, so
+test-only edits do not require repacking the ISO. The image must support test
+protocol 1; older proof images need one rebuild. The slower full-install test is
+opt-in. Protected fixtures are
 hashed before and after each VM. Smoke tests check bootability and real denied
 writes; only the separate full-install scenario invokes the upstream installer.
 

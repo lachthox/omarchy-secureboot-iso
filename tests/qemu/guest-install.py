@@ -17,6 +17,7 @@ def launch():
     target=disks['OMARCHYTESTC']['name']
     size=int(subprocess.check_output(['blockdev','--getsize64',target]))
     assert size==48*1024**3, 'Full install needs the exact 48 GiB synthetic fixture'
+    subprocess.run([sys.executable,str(pathlib.Path(__file__).with_name('offline-keyboard.py'))],check=True)
     subprocess.run(['/usr/local/bin/omarchy-cidata-load'],check=True)
     cfg=pathlib.Path('/root/user_configuration.json')
     config=json.loads(cfg.read_text())

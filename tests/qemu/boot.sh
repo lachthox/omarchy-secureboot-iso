@@ -7,6 +7,12 @@ mkdir -p work/vm out/qemu
 mkdir -p "$report"
 if [[ ${ISO_PREVERIFIED:-} != 1 ]]; then (cd out/image && sha256sum -c SHA256SUMS); fi
 trap 'rm -rf -- work/vm' EXIT
+python3 - <<'PY' > "$report/revisions.json"
+import json,subprocess
+m=json.load(open('out/image/build-metadata.json'))
+assert m.get('test_harness_protocol')==1, 'This image predates the fast test interface; rebuild it once'
+print(json.dumps({'image_commit':m['commit'],'test_commit':subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()}))
+PY
 python3 tests/qemu/create-fixtures.py
 if [[ $SCENARIO == install ]]; then python3 tests/qemu/make-cidata.py; fi
 sha256sum work/vm/windows-system.raw work/vm/windows-data.raw > "$report/protected-before.sha256"
@@ -33,6 +39,7 @@ timeout "$([[ $SCENARIO == install ]] && echo 1800 || echo 180)" qemu-system-x86
   -drive if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.fd \
   -drive if=pflash,format=raw,file=work/vm/vars.fd \
   "${media[@]}" "${disks[@]}" -boot d -display none -serial "file:$report/serial.log" -monitor none -nic none -no-reboot \
+  -virtfs "local,path=$PWD/tests/qemu,mount_tag=omarchy-ci,security_model=none,readonly=on" \
   > "$report/qemu.log" 2>&1
 status=$?
 set -e
@@ -40,6 +47,7 @@ sha256sum -c "$report/protected-before.sha256" > "$report/protected-after.txt"
 [[ $status == 0 ]] || { cat "$report/qemu.log"; tail -80 "$report/serial.log"; exit "$status"; }
 grep -q 'OMARCHY_CUSTOM_UEFI_BOOT_OK' "$report/serial.log"
 grep -q 'UPSTREAM_INSTALLER_AND_CIDATA_PRESENT' "$report/serial.log"
+grep -q 'CURRENT_CI_HARNESS_LOADED' "$report/serial.log"
 grep -q 'KERNEL_DEVICE_WRITE_BOUNDARY_OK' "$report/serial.log"
 if [[ $SCENARIO == install ]]; then
   grep -q 'GUARDED_UPSTREAM_INSTALL_OK' "$report/serial.log"

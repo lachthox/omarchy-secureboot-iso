@@ -21,6 +21,7 @@ import json, os, pathlib, subprocess
 data={'schema':1,'profile':'diagnostic-only','commit':subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),
       'run_id':os.environ['GITHUB_RUN_ID'],'upstream':json.load(open('configs/upstream.json')),
       'secure_boot_supported':False,'physical_installation_validated':False,
+      'test_harness_protocol':1,
       'compression':'zstd level 6, 1MiB blocks','source_date_epoch':os.environ['SOURCE_DATE_EPOCH']}
 data['injected_files']=json.load(open('out/injected-files.json'))
 pathlib.Path('out/image/build-metadata.json').write_text(json.dumps(data,indent=2)+'\n')

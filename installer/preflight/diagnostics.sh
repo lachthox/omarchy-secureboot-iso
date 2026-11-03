@@ -10,9 +10,16 @@ echo 'OMARCHY_CUSTOM_DIAGNOSTICS_STARTED'
 echo 'UPSTREAM_INSTALLER_AND_CIDATA_PRESENT'
 lsblk --json --bytes -o NAME,TYPE,MODEL,SERIAL,SIZE,FSTYPE,MOUNTPOINTS
 if [[ $(cat /sys/class/dmi/id/sys_vendor) == QEMU || $(cat /sys/class/dmi/id/sys_vendor) == Bochs ]]; then
-  python /usr/local/lib/omarchy-ci/guest-guard.py
+  harness=/usr/local/lib/omarchy-ci
+  # CI exposes ONLY repository test sources via a read-only virtio-9p share.
+  # This lets test-only edits reuse an existing ISO without extraction/rebuild.
+  if modprobe 9pnet_virtio && mkdir -p /run/omarchy-ci && mount -t 9p -o trans=virtio,version=9p2000.L,ro,nodev,nosuid omarchy-ci /run/omarchy-ci; then
+    harness=/run/omarchy-ci
+    echo 'CURRENT_CI_HARNESS_LOADED'
+  fi
+  python "$harness/guest-guard.py"
   if [[ -e /dev/disk/by-label/cidata ]]; then
-    python /usr/local/lib/omarchy-ci/guest-install.py
+    python "$harness/guest-install.py"
   fi
 fi
 echo 'OMARCHY_CUSTOM_UEFI_BOOT_OK'
