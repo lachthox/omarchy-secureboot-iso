@@ -2,6 +2,7 @@
 import argparse
 import os
 import pathlib
+import re
 import selectors
 import subprocess
 import time
@@ -29,7 +30,11 @@ try:
                     continue
                 log.write(chunk); log.flush()
                 recent = (recent+chunk)[-16384:]
-                if args.scenario == 'wizard-encrypted' and not sent and b'passphrase' in recent.lower():
+                if (args.scenario == 'wizard-encrypted' and not sent
+                        and re.search(rb'Enter passphrase for /dev/[A-Za-z0-9/_-]+: $', recent)):
+                    # cryptsetup prints its prompt before TCSAFLUSH disables echo
+                    # and discards queued input. Model a human's response delay.
+                    time.sleep(0.5)
                     process.stdin.write(b'VM-only-public-test-passphrase\n'); process.stdin.flush()
                     sent = True
             if process.poll() is not None and not selector.get_map():

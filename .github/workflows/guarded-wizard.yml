@@ -2,7 +2,7 @@ name: Actual guarded wizard acceptance
 on:
   push:
     branches: [codex/guarded-wizard]
-    paths: ['installer/disk-protection/**', 'installer/tui/**', 'tests/qemu/wizard-acceptance.py', '.github/workflows/guarded-wizard.yml']
+    paths: ['installer/disk-protection/**', 'installer/tui/**', 'tests/qemu/wizard-acceptance.py', 'tests/qemu/boot-installed.py', 'tests/qemu/boot.sh', '.github/workflows/guarded-wizard.yml']
   workflow_dispatch:
 permissions:
   contents: read
