@@ -6,6 +6,8 @@ import os
 import pathlib
 import subprocess
 import sys
+import stat
+import tempfile
 
 
 def devices():
@@ -14,7 +16,9 @@ def devices():
     data=json.loads(subprocess.check_output(['lsblk','-J','-p','-o','NAME,TYPE,SERIAL,RO,LABEL']))
     def source(d):
         return d.get('ro') and (d.get('label')=='OMARCHY_202610' or any(p.get('label')=='OMARCHY_202610' for p in d.get('children',[])))
-    result={d.get('serial'):d for d in data['blockdevices'] if d['type']=='disk' and not source(d)}
+    raw=[d for d in data['blockdevices'] if d['type']=='disk' and not source(d)]
+    assert len(raw)==3, 'Unexpected number of synthetic disks'
+    result={d.get('serial'):d for d in raw}
     assert set(result)=={'WINDOWS_A','WINDOWS_B','OMARCHYTESTC'}, 'Unexpected guest disks; refusing writes'
     return result
 
@@ -31,6 +35,17 @@ def child():
             else:
                 os.close(fd)
                 raise AssertionError('Protected device unexpectedly opened for writing: '+path)
+            # A different path to the same kernel device must not bypass policy.
+            with tempfile.TemporaryDirectory() as tmp:
+                alias=str(pathlib.Path(tmp)/'alias')
+                try:
+                    os.mknod(alias,stat.S_IFBLK|0o600,os.stat(path).st_rdev)
+                    fd=os.open(alias,os.O_WRONLY|os.O_CLOEXEC)
+                except OSError as exc:
+                    assert exc.errno in (errno.EPERM,errno.EACCES), exc
+                else:
+                    os.close(fd)
+                    raise AssertionError('Protected device alias bypassed kernel policy')
     # A real target write proves the sandbox is selective rather than denying everything.
     target=disks['OMARCHYTESTC']['name']
     with open(target,'r+b',buffering=0) as f:

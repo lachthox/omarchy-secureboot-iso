@@ -37,6 +37,13 @@ extraction and recompression. Inspection success does not prove build/test sizin
 more free space, but this is not a guarantee. A build preflight requires 40 GB
 free. If that fails, configure a larger **GitHub-hosted** runner; do not fall back
 to the desktop. CPU/memory limits are bounded to four squashfs workers and 4 GiB.
+The first complete diagnostic rebuild took 87.20 s, with peak RSS 3,312,356 KiB.
+Full root extraction used 7,545,491,456 bytes and took 17.18 s. That build retained
+58,637,012,992 free bytes at its final-space measurement, so a larger runner was
+not required for this measured workload. VM installation resources are measured
+separately. Artifact distribution was substantially slower than guest startup;
+the normal pipeline now tests in the build workspace before uploading once.
+
 Tool versions and runner image metadata are retained; Ubuntu packages are
 recorded, not claimed to be immutable or byte-reproducible across image updates.
 

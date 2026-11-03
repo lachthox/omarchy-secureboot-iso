@@ -7,15 +7,28 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: Verify once and run local VM scenarios
+    - name: Verify runner-local image once
       shell: bash
-      env:
-        FULL_INSTALL: ${{ inputs.full_install }}
       run: |
+        mkdir -p out/qemu
         (cd out/image && sha256sum -c SHA256SUMS)
-        for scenario in cdrom usb reordered; do
-          SCENARIO="$scenario" ISO_PREVERIFIED=1 bash tests/qemu/boot.sh
-        done
-        if [[ "$FULL_INSTALL" == true ]]; then
-          SCENARIO=install ISO_PREVERIFIED=1 bash tests/qemu/boot.sh
-        fi
+    - name: UEFI CD boot and denied-write controls
+      shell: bash
+      run: /usr/bin/time -v -o out/qemu/cdrom-time.txt env SCENARIO=cdrom ISO_PREVERIFIED=1 bash tests/qemu/boot.sh
+    - name: UEFI USB boot and denied-write controls
+      shell: bash
+      run: /usr/bin/time -v -o out/qemu/usb-time.txt env SCENARIO=usb ISO_PREVERIFIED=1 bash tests/qemu/boot.sh
+    - name: Changed device order and denied-write controls
+      shell: bash
+      run: /usr/bin/time -v -o out/qemu/reordered-time.txt env SCENARIO=reordered ISO_PREVERIFIED=1 bash tests/qemu/boot.sh
+    - name: Publish small smoke reports before longer installation testing
+      if: always()
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+      with:
+        name: smoke-reports-${{ github.run_id }}
+        path: out/qemu/
+        retention-days: 7
+    - name: Upstream unattended install inside the same write boundary
+      if: inputs.full_install == 'true'
+      shell: bash
+      run: /usr/bin/time -v -o out/qemu/install-time.txt env SCENARIO=install ISO_PREVERIFIED=1 bash tests/qemu/boot.sh

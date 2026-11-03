@@ -29,7 +29,7 @@ fi
 accel=(-accel tcg -cpu max)
 if [[ -c /dev/kvm ]]; then sudo chmod a+rw /dev/kvm; accel=(-accel kvm -cpu host); fi
 set +e
-timeout "$([[ $SCENARIO == install ]] && echo 1800 || echo 600)" qemu-system-x86_64 -machine q35 "${accel[@]}" -m 8192 -smp 4 \
+timeout "$([[ $SCENARIO == install ]] && echo 1800 || echo 180)" qemu-system-x86_64 -machine q35 "${accel[@]}" -m 8192 -smp 4 \
   -drive if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.fd \
   -drive if=pflash,format=raw,file=work/vm/vars.fd \
   "${media[@]}" "${disks[@]}" -boot d -display none -serial "file:$report/serial.log" -monitor none -nic none -no-reboot \

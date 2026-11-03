@@ -9,7 +9,7 @@ def inventory():
     if os.name != 'posix' or not pathlib.Path('/run/archiso').exists():
         raise RuntimeError('Discovery runs only in a booted ArchISO live environment')
     data = json.loads(subprocess.check_output(['lsblk', '--json', '--bytes', '--paths', '--output',
-        'NAME,TYPE,MODEL,SERIAL,SIZE,FSTYPE,PARTTYPE,MOUNTPOINTS,RM,MAJ:MIN']))
+        'NAME,TYPE,MODEL,SERIAL,SIZE,FSTYPE,PARTTYPE,PARTUUID,UUID,MOUNTPOINTS,RM,MAJ:MIN']))
     aliases = {}
     for p in sorted(pathlib.Path('/dev/disk/by-id').glob('*')):
         if '-part' not in p.name and p.is_symlink():
@@ -24,9 +24,10 @@ def inventory():
         children = d.get('children', [])
         disk = {'path':path, 'model':(d.get('model') or '').strip(), 'serial':(d.get('serial') or '').strip(),
             'size':int(d['size']), 'by_id':stable, 'major_minor':d['maj:min'], 'removable':bool(d['rm']),
-            'mounted':bool(any(d.get('mountpoints') or [])), 'holders':_holders(path), 'partitions':[]}
+            'mounted':bool(any(d.get('mountpoints') or [])), 'holders':_holders(path), 'partitions':[], 'fstype':d.get('fstype') or ''}
         for p in children:
             part = {'path':p['name'], 'fstype':p.get('fstype') or '',
+                'partuuid':p.get('partuuid'), 'uuid':p.get('uuid'), 'size':p.get('size'),
                 'esp':str(p.get('parttype')).lower()=='c12a7328-f81f-11d2-ba4b-00a0c93ec93b',
                 'mounted':bool(any(p.get('mountpoints') or [])), 'holders':_holders(p['name']), 'windows':False}
             # Recognize BitLocker independently of blkid's filesystem label.

@@ -30,6 +30,15 @@ class Safety(unittest.TestCase):
             d=fixture(); d[2]['partitions']=[part]
             with self.assertRaises(Refused): plan(d,d[2]['by_id'],'LINUX-C')
 
+    def test_whole_disk_bitlocker_is_rejected(self):
+        d=fixture(); d[2]['fstype']='BitLocker'
+        with self.assertRaises(Refused): plan(d,d[2]['by_id'],'LINUX-C')
+
+    def test_partition_changes_require_reconfirmation(self):
+        d=fixture(); p=plan(d,d[2]['by_id'],'LINUX-C')
+        d[2]['partitions']=[{'fstype':'btrfs','partuuid':'new-partition'}]
+        with self.assertRaises(Refused): revalidate(p,d)
+
     def test_missing_duplicate_and_wrong_identity(self):
         for key,value in (('serial',''),('by_id',''),('serial','WIN-A'),('size',128_000_000_000),('model','Unknown')):
             d=fixture(); d[2][key]=value

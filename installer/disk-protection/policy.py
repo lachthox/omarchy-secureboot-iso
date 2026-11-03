@@ -31,6 +31,8 @@ def validate_inventory(disks):
 
 def reasons(disk):
     result = []
+    if disk.get('fstype') in WINDOWS_FILESYSTEMS or disk.get('windows'):
+        result.append('Whole-disk Windows/data filesystem or BitLocker detected')
     if any(normalize(x) in normalize(disk['model']) for x in PROTECTED_MODELS):
         result.append('Protected Windows hardware model')
     if disk.get('mounted') or disk.get('holders') or disk.get('removable'):
@@ -46,7 +48,10 @@ def reasons(disk):
 
 
 def identity(disk):
-    return {key: disk[key] for key in ('model', 'serial', 'size', 'by_id')}
+    result = {key: disk[key] for key in ('model', 'serial', 'size', 'by_id')}
+    result['partitions'] = [{k:p.get(k) for k in ('partuuid','uuid','size','fstype','esp','windows')}
+                            for p in disk.get('partitions',[])]
+    return result
 
 
 def plan(disks, target_id, confirmation_serial):

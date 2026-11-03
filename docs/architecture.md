@@ -14,10 +14,18 @@ the live filesystem and replays the original xorriso boot equipment. It compares
 the original and rebuilt hidden ESP bytes. Original installer source is untouched
 in the diagnostic milestone. No upstream script is run on the build host.
 
-`test-iso.yml` downloads the build artifact and boots it under OVMF with three
-regular-file-backed virtual disks. CD-ROM, USB and reordered-device scenarios
-run independently. Protected fixtures are hashed before and after the VM runs.
-The first milestone checks startup/presence, **not a successful installation**.
+The build runs the shared `.github/actions/vm-test` component against the ISO
+already on its runner, before uploading it. No test downloads are needed in the
+normal pipeline. CD-ROM, USB and reordered-device scenarios run sequentially,
+reusing the immutable ISO with fresh regular-file-backed disks and OVMF state.
+This avoids three multi-gigabyte downloads and keeps guest RAM within the
+standard runner's capacity. Pure policy checks run independently.
+
+`test-iso.yml` is for standalone retesting: it downloads an artifact **once**,
+checks out that build's revision, then runs every selected scenario against the
+same local file. The slower full-install test is opt-in. Protected fixtures are
+hashed before and after each VM. Smoke tests check bootability and real denied
+writes; only the separate full-install scenario invokes the upstream installer.
 
 The official [unattended interface](https://omarchy.org/manual/unattended-installs/)
 uses a second drive labelled `cidata`. The released 4.0.6 ISO contains its loader.
