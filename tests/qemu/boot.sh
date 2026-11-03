@@ -6,7 +6,16 @@ report=out/qemu/$SCENARIO
 mkdir -p work/vm out/qemu
 mkdir -p "$report"
 if [[ ${ISO_PREVERIFIED:-} != 1 ]]; then (cd out/image && sha256sum -c SHA256SUMS); fi
-trap 'rm -rf -- work/vm' EXIT
+cleanup() {
+  local result=$?
+  if [[ -f $report/protected-before.sha256 ]]; then
+    sha256sum -c "$report/protected-before.sha256" > "$report/protected-final.txt" || result=1
+  fi
+  rm -rf -- work/vm
+  trap - EXIT
+  exit "$result"
+}
+trap cleanup EXIT
 python3 - <<'PY' > "$report/revisions.json"
 import json,subprocess
 m=json.load(open('out/image/build-metadata.json'))
@@ -54,6 +63,7 @@ if [[ $SCENARIO == invalid ]]; then
   printf 'Unrecognized target refused; every synthetic disk byte unchanged.\n' > "$report/result.txt"
   exit 0
 fi
+if grep -q OMARCHY_CI_FAILURE "$report/serial.log"; then exit 1; fi
 grep -q 'OMARCHY_CUSTOM_UEFI_BOOT_OK' "$report/serial.log"
 grep -q 'UPSTREAM_INSTALLER_AND_CIDATA_PRESENT' "$report/serial.log"
 grep -q 'CURRENT_CI_HARNESS_LOADED' "$report/serial.log"
@@ -68,6 +78,7 @@ if [[ $SCENARIO == install ]]; then
     > "$report/installed-qemu.log" 2>&1
   sha256sum -c "$report/protected-before.sha256" > "$report/protected-after-installed-boot.txt"
   grep -q OMARCHY_INSTALLED_UEFI_BOOT_OK "$report/installed-serial.log"
+  if grep -q OMARCHY_INSTALLED_BOOT_FAILED "$report/installed-serial.log"; then exit 1; fi
   printf 'Upstream install and installed-system UEFI boot passed; protected bytes and Windows NVRAM entry unchanged.\n' > "$report/result.txt"
 else
   printf 'UEFI boot and kernel device-write boundary passed; protected bytes unchanged. No installation performed.\n' > "$report/result.txt"

@@ -27,7 +27,7 @@ jobs:
           persist-credentials: false
       - run: |
           sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends xorriso squashfs-tools fdisk gnupg jq time qemu-system-x86 qemu-utils ovmf dosfstools mtools gdisk
+          sudo apt-get install -y --no-install-recommends xorriso squashfs-tools fdisk gnupg jq time qemu-system-x86 qemu-utils ovmf dosfstools mtools gdisk sbsigntool file binutils
       - run: source scripts/common.sh; MIN_FREE_BYTES=40000000000 preflight
       - id: source
         run: echo "sha=$(jq -r .sha256 configs/upstream.json)" >> "$GITHUB_OUTPUT"

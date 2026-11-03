@@ -18,7 +18,7 @@ jobs:
       - name: Install analysis tools
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends xorriso squashfs-tools fdisk mtools dosfstools gnupg jq time
+          sudo apt-get install -y --no-install-recommends xorriso squashfs-tools fdisk mtools dosfstools gnupg jq time sbsigntool file binutils
       - name: Measure runner and check space
         run: source scripts/common.sh; preflight
       - id: source
