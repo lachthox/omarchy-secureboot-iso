@@ -2,5 +2,5 @@
   "schema": 1,
   "physical_installation_enabled": false,
   "secure_boot_enforced": false,
-  "reason": "Signed live-root, installed-system, update and recovery acceptance is still pending."
+  "reason": "VM signed live/installed boot, update and independent recovery checks passed. Interactive owner enrollment, automatic recovery selection, signed hardware media and physical disk validation remain unverified."
 }

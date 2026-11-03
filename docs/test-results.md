@@ -16,6 +16,7 @@ used synthetic regular-file-backed QEMU drives, never host block devices.
 | [Actual guarded wizard](https://github.com/lachthox/omarchy-secureboot-iso/actions/runs/41642803574) | Read-only audit and unencrypted install/installed boot passed; encrypted installation completed but its reboot timed out at the passphrase prompt; interruption case was skipped |
 | [Actual signed live payload](https://github.com/lachthox/omarchy-secureboot-iso/actions/runs/41642803460) | Complete live acceptance passed with enforcing OVMF, authenticated live root and Microsoft shim/MOK trust; this is not installed-system or hardware acceptance |
 | [Corrected guarded wizard acceptance](https://github.com/lachthox/omarchy-secureboot-iso/actions/runs/41645933032) | Read-only audit, actual unencrypted/encrypted installation and installed boot, and forced writer interruption passed |
+| [Actual signed installed-system acceptance](https://github.com/lachthox/omarchy-secureboot-iso/actions/runs/41653839295) | Real encrypted installed-system key generation/signing/update, signing-failure preservation, Microsoft shim/MOK enforcing boot, intact-PE initramfs tamper rejection and independent recovery boot passed |
 
 The low-level sandbox tests actually attempted writable opens on both protected
 disks and their partitions, including aliases for the same device numbers. Those
@@ -67,7 +68,8 @@ The passphrase driver now waits for the complete cryptsetup prompt and allows
 terminal setup to finish before sending input: cryptsetup prints the prompt
 before disabling echo with TCSAFLUSH, which can discard an immediate response.
 The signed installed-system chain, interactive owner enrollment, real signed
-updates/recovery and NVIDIA module signing still require acceptance tests.
+update integration, interactive recovery selection and NVIDIA module signing
+still require acceptance tests.
 
 The **Actual installed-system signing and recovery acceptance** workflow now
 exercises the real machine-local key-generation and update scripts on the
@@ -75,8 +77,8 @@ encrypted installed guest. It checks a successful update and a signing failure,
 then boots the signed current and independent recovery UKIs through Microsoft
 shim/MOK and rejects a modified initramfs. Its tooling share is read-only; the
 ephemeral private key stays inside the disposable encrypted target, which is not
-uploaded. This workflow is pending until its actual run succeeds. It does not
-test interactive MOK enrollment or an automatic recovery selector.
+uploaded. The linked run passed. It does not test interactive MOK enrollment,
+an automatic recovery selector, package-manager update hooks, or physical media.
 
 GPU Unlock remains disabled; source preparation, compatibility checks, recovery
 design and benchmark tooling exist, but target RTX 3070 performance/thermal/power

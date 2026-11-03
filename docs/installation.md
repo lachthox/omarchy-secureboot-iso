@@ -11,8 +11,15 @@
    to preserve the hybrid partition/EFI structure exactly. This has not yet been
    tested with a real USB stick or motherboard.
 4. The default menu entry performs diagnostics and powers off. Original Omarchy
-   entries are preserved for upstream comparison and do not yet enforce this
-   project's Windows protection. Do not use those entries on the target desktop.
+   entries are preserved for upstream comparison. Current builds also include
+   **Read-only hardware validation - NO installation**, which routes through the
+   guarded launcher with kernel-denied disk writes while production capabilities
+   remain disabled. Previously published images do not contain this new entry.
+
+The current rebuilt diagnostic ISO is **not signed hardware-validation media**.
+The successful shim/MOK tests use ephemeral VM trust; their private keys are
+never distributed. Do not disable Secure Boot, replace platform keys or attempt
+physical installation to bypass this remaining media/enrollment gate.
 
 The intended production sequence is select Crucial BX500 by stable identity,
 confirm its serial and the partition plan, install with an enforced write
