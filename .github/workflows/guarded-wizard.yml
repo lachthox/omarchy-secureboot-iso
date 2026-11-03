@@ -19,6 +19,7 @@ jobs:
         with:
           persist-credentials: false
       - run: bash scripts/install-tools.sh test
+      - run: bash scripts/prepare-runner-space.sh
       - name: Download one verified existing image for all cases
         env:
           GH_TOKEN: ${{ github.token }}

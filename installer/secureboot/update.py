@@ -48,6 +48,31 @@ def main():
     esp = pathlib.Path('/boot')
     if subprocess.check_output(['findmnt', '-n', '-o', 'FSTYPE', '--mountpoint', str(esp)], text=True).strip() != 'vfat':
         raise InvalidBootImage('The target-local ESP is not mounted at /boot')
+    binding = pathlib.Path('/etc/omarchy-custom/storage.json')
+    if binding.is_symlink() or binding.stat().st_uid != 0 or binding.stat().st_mode & 0o077:
+        raise InvalidBootImage('Installed storage binding is unsafe')
+    expected = json.loads(binding.read_text())
+    target_path = str(pathlib.Path(expected['by_id']).resolve(strict=True))
+    esp_source = subprocess.check_output(['findmnt','-n','-o','SOURCE','--mountpoint',str(esp)],text=True).strip()
+    if subprocess.check_output(['blkid','-s','PARTUUID','-o','value',esp_source],text=True).strip() != expected['esp_partuuid']:
+        raise InvalidBootImage('ESP partition identity changed')
+    def ancestors(path):
+        tree = json.loads(subprocess.check_output(['lsblk','-sJpb','-o','NAME,TYPE,MODEL,SERIAL,SIZE',path]))
+        result = []
+        def walk(node):
+            if node['type'] == 'disk': result.append(node)
+            for child in node.get('children',[]): walk(child)
+        for node in tree['blockdevices']: walk(node)
+        return result
+    for path in (source, esp_source):
+        disks = ancestors(path)
+        if len(disks) != 1:
+            raise InvalidBootImage('Ambiguous installed root/ESP ancestry')
+        disk = disks[0]
+        if (disk['name'] != target_path or (disk.get('serial') or '').strip() != expected['serial']
+                or int(disk['size']) != expected['size']
+                or ''.join((disk.get('model') or '').upper().split()) != ''.join(expected['model'].upper().split())):
+            raise InvalidBootImage('Root or ESP does not belong to the confirmed installation disk')
     base = pathlib.Path('/var/lib/omarchy-custom')
     base.mkdir(mode=0o700, parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix='signed-update-', dir=base) as tmp:

@@ -67,7 +67,11 @@ def main():
     matches=[x for x in response['artifacts'] if x['name']=='diagnostic-iso' and not x['expired']]
     assert len(matches)==1, 'Expected one immutable diagnostic-iso artifact'
     artifact=matches[0]; size=artifact['size_in_bytes']
-    assert shutil.disk_usage('.').free>3*size, 'Insufficient space for artifact download/extraction'
+    available=shutil.disk_usage('.').free
+    print(json.dumps({'artifact_bytes':size,'free_bytes':available}),flush=True)
+    # Completed range files are removed as they are joined. The two peaks are
+    # chunks+ZIP and ZIP+extracted image, never all three simultaneously.
+    assert available>size*2.1, 'Insufficient space for artifact download/extraction'
     a.destination.mkdir(parents=True,exist_ok=True)
     assert not list(a.destination.iterdir()), 'Artifact output directory must be empty'
     started=time.monotonic()
@@ -81,6 +85,7 @@ def main():
             names={i.filename for i in files}
             assert 'SHA256SUMS' in names and 'build-metadata.json' in names
             assert len([n for n in names if n.endswith('.iso')])==1 and len(files)==3
+            assert sum(i.file_size for i in files)<=size*1.05, 'Unexpectedly compressed/oversized ISO artifact'
             for entry in files:
                 assert re.fullmatch(r'[A-Za-z0-9._-]+',entry.filename)
                 assert (entry.external_attr>>16)&0o170000!=0o120000, 'Symlink in artifact'

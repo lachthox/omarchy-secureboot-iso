@@ -266,6 +266,12 @@ def writer():
         if mapper and (pathlib.Path('/mnt/etc/omarchy/provisioning.key').exists() or
                        pathlib.Path('/mnt/var/lib/omarchy/provisioning/luks-key').exists()):
             raise Refused('An unattended unlock key was unexpectedly staged')
+        state = pathlib.Path('/mnt/etc/omarchy-custom')
+        state.mkdir(mode=0o700, exist_ok=True)
+        binding = {k: target[k] for k in ('model','serial','size','by_id')}
+        binding['esp_partuuid'] = subprocess.check_output(['blkid','-s','PARTUUID','-o','value',parts[0]],text=True).strip()
+        (state/'storage.json').write_text(json.dumps(binding,indent=2)+'\n')
+        (state/'storage.json').chmod(0o600)
         if payload['ci_probe']:
             # Accepted only after the harness confirms its read-only share and
             # exact VM disk identities. Never reachable in a physical session.
