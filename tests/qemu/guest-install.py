@@ -81,7 +81,7 @@ def child():
     shutil.copyfile(pathlib.Path(__file__).with_name('installed-boot.sh'),probe)
     probe.chmod(0o755)
     unit=target/'etc/systemd/system/omarchy-ci-installed.service'
-    unit.write_text('[Unit]\nDescription=CI installed-system boot probe\nAfter=local-fs.target\nConditionVirtualization=qemu\n[Service]\nType=oneshot\nExecStart=/usr/local/lib/omarchy-ci-installed-boot\n[Install]\nWantedBy=multi-user.target\n')
+    unit.write_text('[Unit]\nDescription=CI installed-system boot probe\nAfter=local-fs.target\nConditionVirtualization=yes\n[Service]\nType=oneshot\nExecStart=/usr/local/lib/omarchy-ci-installed-boot\n[Install]\nWantedBy=multi-user.target\n')
     wants=unit.parent/'multi-user.target.wants'; wants.mkdir(exist_ok=True)
     (wants/unit.name).symlink_to('/etc/systemd/system/'+unit.name)
     print('INSTALLED_TARGET_ESP_AND_UKI_PRESENT',flush=True)
