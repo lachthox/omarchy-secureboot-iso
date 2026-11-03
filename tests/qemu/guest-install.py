@@ -18,6 +18,7 @@ def launch():
     size=int(subprocess.check_output(['blockdev','--getsize64',target]))
     assert size==48*1024**3, 'Full install needs the exact 48 GiB synthetic fixture'
     subprocess.run([sys.executable,str(pathlib.Path(__file__).with_name('offline-keyboard.py'))],check=True)
+    subprocess.run([sys.executable,str(pathlib.Path(__file__).with_name('classic-chroot.py'))],check=True)
     subprocess.run(['/usr/local/bin/omarchy-cidata-load'],check=True)
     cfg=pathlib.Path('/root/user_configuration.json')
     config=json.loads(cfg.read_text())
@@ -30,7 +31,8 @@ def launch():
     # can write ONLY the verified synthetic target. No protected partition is
     # writable. Then allow only these descendants for the upstream phase.
     base=['systemd-run','--quiet','--wait','--pipe','--collect','--property=DevicePolicy=closed',
-        '--property=NoNewPrivileges=yes','--property=ProtectControlGroups=yes',
+        '--property=NoNewPrivileges=yes','--property=ProtectControlGroups=yes','--property=PrivatePIDs=yes',
+        '--property=SystemCallFilter=~bpf ptrace process_vm_readv process_vm_writev',
         '--property=CapabilityBoundingSet=~CAP_SYS_RAWIO CAP_SYS_PTRACE CAP_SYS_MODULE CAP_BPF CAP_PERFMON']
     subprocess.run(base+['--property=DeviceAllow='+target+' rw','sfdisk',target],
         input='label: gpt\nstart=2048,size=4194304,type=U\nstart=4196352,type=L\n',text=True,check=True)

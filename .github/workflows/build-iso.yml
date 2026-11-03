@@ -40,12 +40,14 @@ jobs:
       - run: /usr/bin/time -v -o out/extraction-time.txt bash scripts/extract-iso.sh
       - run: bash scripts/patch-iso.sh
       - run: /usr/bin/time -v -o out/rebuild-time.txt bash scripts/rebuild-iso.sh
-      - run: bash scripts/verify-iso.sh
+      - id: verify
+        run: bash scripts/verify-iso.sh
       - name: Test the ISO already on this runner
         uses: ./.github/actions/vm-test
         with:
           full_install: ${{ inputs.full_install || false }}
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        if: always() && steps.verify.outcome == 'success'
         with:
           name: diagnostic-iso
           path: out/image/

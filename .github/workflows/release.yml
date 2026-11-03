@@ -1,4 +1,4 @@
-name: Release verified production ISO
+name: Publish tested ISO through GitHub Releases
 on:
   workflow_dispatch:
     inputs:
@@ -10,6 +10,11 @@ on:
         description: Release tag (v followed by a version)
         required: true
         type: string
+      release_kind:
+        description: Diagnostic prerelease or fully validated production release
+        type: choice
+        options: [diagnostic, production]
+        default: diagnostic
 permissions:
   contents: read
   actions: read
@@ -59,10 +64,11 @@ jobs:
           path: release
           run-id: ${{ inputs.build_run_id }}
           github-token: ${{ github.token }}
-      - name: Validate acceptance metadata and bytes before exposing storage credentials
+      - name: Validate test status, source and ISO bytes
         env:
           BUILD_RUN: ${{ inputs.build_run_id }}
           SOURCE_SHA: ${{ needs.gate.outputs.source_sha }}
+          RELEASE_KIND: ${{ inputs.release_kind }}
         run: |
           cd release
           sha256sum -c SHA256SUMS
@@ -70,31 +76,39 @@ jobs:
           import json,os
           m=json.load(open('build-metadata.json'))
           assert m['commit']==os.environ['SOURCE_SHA'] and m['run_id']==os.environ['BUILD_RUN']
-          assert m['profile']=='production', 'Diagnostic images cannot be published as production installers'
-          assert m.get('secure_boot_supported') is True
-          assert m.get('disk_protection_validated') is True
-          assert m.get('full_installation_validated') is True
+          if os.environ['RELEASE_KIND']=='production':
+              assert m['profile']=='production', 'Diagnostic images cannot be published as production installers'
+              assert m.get('secure_boot_supported') is True
+              assert m.get('disk_protection_validated') is True
+              assert m.get('full_installation_validated') is True
+          else:
+              assert m['profile']=='diagnostic-only'
           PY
-      - name: Upload one flashable ISO and verify its public SHA256
+      - name: Package GitHub-sized parts and Windows download helper
         env:
           RELEASE_TAG: ${{ inputs.tag }}
-          RELEASE_BUCKET: ${{ vars.RELEASE_BUCKET }}
-          RELEASE_PUBLIC_BASE_URL: ${{ vars.RELEASE_PUBLIC_BASE_URL }}
-          RELEASE_S3_ENDPOINT: ${{ vars.RELEASE_S3_ENDPOINT }}
-          RELEASE_REGION: ${{ vars.RELEASE_REGION }}
-          AWS_ACCESS_KEY_ID: ${{ secrets.RELEASE_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.RELEASE_SECRET_ACCESS_KEY }}
-        run: bash scripts/publish-object-storage.sh
-      - name: Publish GitHub release with direct ISO download link
+          GH_REPO: ${{ github.repository }}
+        run: |
+          mapfile -t images < <(find release -maxdepth 1 -name '*.iso' -type f)
+          [[ ${#images[@]} == 1 ]]
+          python3 scripts/package-release.py "${images[0]}" release-assets --repository "$GH_REPO" --tag "$RELEASE_TAG"
+          cp release/build-metadata.json release-assets/
+      - name: Upload draft assets, then publish the complete release
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ inputs.tag }}
           SOURCE_SHA: ${{ needs.gate.outputs.source_sha }}
+          RELEASE_KIND: ${{ inputs.release_kind }}
         run: |
           python3 - <<'PY'
-          import json,pathlib
-          root=pathlib.Path('release'); m=json.loads((root/'build-metadata.json').read_text()); url=(root/'iso-download-url.txt').read_text().strip()
-          (root/'release-notes.md').write_text('Official Omarchy '+m['upstream']['version']+' derivative.\n\n[Download the single Rufus-flashable ISO]('+url+')\n\nBuild commit: '+m['commit']+'\n\nVerify SHA256SUMS before flashing. Physical firmware, BitLocker and Vanguard compatibility require separate validation. GPU unlock is experimental and opt-in. See repository installation and recovery documentation.\n')
+          import json,pathlib,os
+          root=pathlib.Path('release-assets'); m=json.loads((root/'build-metadata.json').read_text())
+          warning='DIAGNOSTIC PRERELEASE: not a protected installer. Secure Boot and GPU unlock are not enabled. Do not install on physical hardware.\n\n' if os.environ['RELEASE_KIND']=='diagnostic' else ''
+          (root/'release-notes.md').write_text(warning+'Official Omarchy '+m['upstream']['version']+' derivative.\n\nDownload Get-OmarchyISO.ps1, then run it with PowerShell. It downloads the split GitHub assets, checks each part, reconstructs one ISO and verifies its full SHA256. Open that ISO in Rufus. Allow about twice the ISO size in free space during reconstruction; cached parts are removed after success.\n\nBuild commit: '+m['commit']+'\n\nThe source ISO boot structures are retained. Physical firmware, BitLocker and Vanguard compatibility require separate validation. See repository installation and recovery documentation.\n')
           PY
-          gh release create "$RELEASE_TAG" --target "$SOURCE_SHA" --title "$RELEASE_TAG" --notes-file release/release-notes.md release/SHA256SUMS release/build-metadata.json release/iso-download-url.txt release/storage-tool-version.txt
+          flags=()
+          if [[ "$RELEASE_KIND" == diagnostic ]]; then flags+=(--prerelease); fi
+          gh release create "$RELEASE_TAG" --draft "${flags[@]}" --target "$SOURCE_SHA" --title "$RELEASE_TAG" --notes-file release-assets/release-notes.md
+          gh release upload "$RELEASE_TAG" release-assets/*
+          gh release edit "$RELEASE_TAG" --draft=false

@@ -1,0 +1,111 @@
+# Reconstruct the published ISO from GitHub release assets. No disk/USB access.
+[CmdletBinding()]
+param(
+    [string]$OutputDirectory = $PSScriptRoot,
+    [string]$LocalAssetsDirectory = '',
+    [switch]$KeepParts
+)
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
+$ProgressPreference = 'SilentlyContinue'
+[Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+$repository = '@REPOSITORY@'
+$releaseTag = '@TAG@'
+$manifestHash = '@MANIFEST_SHA256@'
+$baseUrl = "https://github.com/$repository/releases/download/$releaseTag"
+if ([string]::IsNullOrWhiteSpace($OutputDirectory)) { $OutputDirectory = (Get-Location).Path }
+$outputRoot = [IO.Path]::GetFullPath($OutputDirectory)
+[IO.Directory]::CreateDirectory($outputRoot) | Out-Null
+$cacheRoot = Join-Path $outputRoot ".omarchy-download-$releaseTag"
+if ((Test-Path -LiteralPath $cacheRoot) -and ((Get-Item -LiteralPath $cacheRoot -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+    throw 'The download cache must not be a junction or symbolic link.'
+}
+[IO.Directory]::CreateDirectory($cacheRoot) | Out-Null
+function Get-Asset([string]$Name) {
+    if ($Name -notmatch '^[A-Za-z0-9._-]+$') { throw 'Invalid asset name.' }
+    if ($LocalAssetsDirectory) {
+        $asset = Join-Path ([IO.Path]::GetFullPath($LocalAssetsDirectory)) $Name
+        if (-not [IO.File]::Exists($asset)) { throw "Missing local release asset: $Name" }
+        return $asset
+    }
+    $asset = Join-Path $cacheRoot $Name
+    if (-not [IO.File]::Exists($asset)) {
+        Write-Host "Downloading $Name"
+        $temporary = "$asset.downloading"
+        if (Test-Path -LiteralPath $temporary) { throw "Remove the incomplete download and retry: $temporary" }
+        try {
+            Invoke-WebRequest -UseBasicParsing -Uri "$baseUrl/$Name" -OutFile $temporary
+            [IO.File]::Move($temporary, $asset)
+        } catch {
+            if ([IO.File]::Exists($temporary)) { Remove-Item -LiteralPath $temporary -Force }
+            throw
+        }
+    }
+    return $asset
+}
+$manifestPath = Get-Asset 'release-download.json'
+if ((Get-FileHash -LiteralPath $manifestPath -Algorithm SHA256).Hash.ToLowerInvariant() -ne $manifestHash) { throw 'Release manifest SHA256 mismatch.' }
+$manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+if ($manifest.schema -ne 1 -or $manifest.repository -ne $repository -or $manifest.tag -ne $releaseTag) { throw 'Unexpected release manifest.' }
+if ($manifest.file -notmatch '^omarchy[A-Za-z0-9._-]*\.iso$' -or $manifest.sha256 -notmatch '^[0-9a-f]{64}$') { throw 'Invalid ISO identity.' }
+$parts = @($manifest.parts)
+if ($parts.Count -lt 1 -or $parts.Count -gt 999) { throw 'Invalid part count.' }
+[long]$total = 0
+for ($i = 0; $i -lt $parts.Count; $i++) {
+    $part = $parts[$i]
+    $expectedName = $manifest.file + ('.part-{0:D3}' -f $i)
+    if ($part.name -ne $expectedName -or $part.sha256 -notmatch '^[0-9a-f]{64}$' -or $part.size -le 0 -or $part.size -gt 1500000000) { throw 'Invalid ISO part.' }
+    $total += [long]$part.size
+}
+if ($total -ne [long]$manifest.size) { throw 'Part sizes do not match the ISO size.' }
+$finalIso = Join-Path $outputRoot $manifest.file
+if ([IO.File]::Exists($finalIso)) {
+    if ((Get-FileHash -LiteralPath $finalIso -Algorithm SHA256).Hash.ToLowerInvariant() -eq $manifest.sha256) { Write-Host "Verified ISO already exists: $finalIso"; return }
+    throw "A different file already exists: $finalIso. It will not be overwritten."
+}
+$joinPath = "$finalIso.partial"
+if (Test-Path -LiteralPath $joinPath) { throw "Remove or rename the existing partial file first: $joinPath" }
+$localParts = @()
+foreach ($part in $parts) {
+    $asset = Get-Asset $part.name
+    if ((Get-Item -LiteralPath $asset).Length -ne [long]$part.size -or (Get-FileHash -LiteralPath $asset -Algorithm SHA256).Hash.ToLowerInvariant() -ne $part.sha256) {
+        throw "Part checksum mismatch: $asset. Remove that file and retry."
+    }
+    $localParts += $asset
+}
+$hash = [Security.Cryptography.SHA256]::Create()
+$destinationStream = $null
+$createdJoin = $false
+try {
+    $destinationStream = [IO.File]::Open($joinPath, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None)
+    $createdJoin = $true
+    $buffer = New-Object byte[] 1048576
+    for ($i = 0; $i -lt $localParts.Count; $i++) {
+        Write-Host ('Joining part {0}/{1}' -f ($i + 1), $localParts.Count)
+        $sourceStream = [IO.File]::OpenRead($localParts[$i])
+        try {
+            while (($count = $sourceStream.Read($buffer, 0, $buffer.Length)) -gt 0) {
+                $destinationStream.Write($buffer, 0, $count)
+                [void]$hash.TransformBlock($buffer, 0, $count, $buffer, 0)
+            }
+        } finally { $sourceStream.Dispose() }
+    }
+    [void]$hash.TransformFinalBlock([byte[]]@(), 0, 0)
+    $actualHash = ([BitConverter]::ToString($hash.Hash)).Replace('-', '').ToLowerInvariant()
+    if ($destinationStream.Length -ne [long]$manifest.size -or $actualHash -ne $manifest.sha256) { throw 'Reconstructed ISO checksum mismatch.' }
+    $destinationStream.Flush($true)
+    $destinationStream.Dispose()
+    $destinationStream = $null
+    [IO.File]::Move($joinPath, $finalIso)
+    $createdJoin = $false
+} finally {
+    if ($null -ne $destinationStream) { $destinationStream.Dispose() }
+    $hash.Dispose()
+    if ($createdJoin -and [IO.File]::Exists($joinPath)) { Remove-Item -LiteralPath $joinPath -Force }
+}
+if (-not $KeepParts -and -not $LocalAssetsDirectory) {
+    foreach ($asset in $localParts) { Remove-Item -LiteralPath $asset -Force }
+    Remove-Item -LiteralPath $manifestPath -Force
+}
+Write-Host "Verified ISO ready for Rufus: $finalIso"
+Write-Host 'Use the release notes to check feature status before booting or installing.'

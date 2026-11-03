@@ -26,9 +26,10 @@ authority for which tests passed; a successful build alone does not prove an
 installation is safe. See [measured findings](docs/feasibility.md),
 [architecture](docs/architecture.md), [security model](docs/security-model.md),
 [installation](docs/installation.md), [recovery](docs/recovery.md) and
-[single-ISO release hosting](docs/release-hosting.md).
+[release downloads](docs/release-hosting.md).
 
-The selected release design links a single externally hosted ISO from GitHub
-Releases, with checksum and build metadata attached to the release. Configure a
-bucket and scoped GitHub Actions secrets before enabling publication. Diagnostic
-images are refused by the production release gate.
+Releases use GitHub directly, like the original project. Because this ISO exceeds
+GitHub's 2 GiB per-file limit, Actions publishes smaller parts plus
+`Get-OmarchyISO.ps1`. Run that helper to obtain one checksum-verified ISO for
+Rufus. No external bucket is required. Diagnostic images are visibly labelled
+prereleases and are refused by the production release gate.

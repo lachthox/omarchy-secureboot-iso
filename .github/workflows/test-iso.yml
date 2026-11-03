@@ -11,7 +11,7 @@ on:
   workflow_dispatch:
     inputs:
       build_run_id:
-        description: Successful build run ID from this repository
+        description: Build run ID with an ISO artifact (failed tests may be debugged)
         required: true
         type: string
       full_install:
@@ -38,7 +38,7 @@ jobs:
           python3 - <<'PY'
           import json,os
           r=json.load(open('/tmp/build-run.json'))
-          assert r['path']=='.github/workflows/build-iso.yml' and r['conclusion']=='success'
+          assert r['path']=='.github/workflows/build-iso.yml'
           assert r['repository']['full_name']==os.environ['GH_REPO']
           with open(os.environ['GITHUB_OUTPUT'],'a') as f: f.write('sha='+r['head_sha']+'\n')
           PY
@@ -52,6 +52,17 @@ jobs:
           path: out/image
           run-id: ${{ inputs.build_run_id }}
           github-token: ${{ github.token }}
+      - name: Match image provenance to selected build and harness compatibility
+        env:
+          IMAGE_COMMIT: ${{ steps.build.outputs.sha }}
+        run: |
+          python3 - <<'PY'
+          import json,os
+          m=json.load(open('out/image/build-metadata.json')); c=json.load(open('configs/upstream.json'))
+          assert m['commit']==os.environ['IMAGE_COMMIT']
+          assert m['upstream']['sha256']==c['sha256']
+          assert m.get('test_harness_protocol')==1
+          PY
       - run: |
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends qemu-system-x86 qemu-utils ovmf dosfstools mtools gdisk xorriso

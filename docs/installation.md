@@ -2,6 +2,10 @@
 
 1. Download the **diagnostic-iso** artifact from a successful build run. This is
    a ZIP containing an ISO, SHA256SUMS and build metadata. Extract the ZIP first.
+   For GitHub Releases instead, download `Get-OmarchyISO.ps1` and run
+   `powershell -NoProfile -ExecutionPolicy Bypass -File .\Get-OmarchyISO.ps1`.
+   It obtains and verifies the parts, leaving one ISO. `Bypass` applies only to
+   that process; it does not persistently change execution policy.
 2. Verify the ISO SHA256 against SHA256SUMS before flashing.
 3. For physical validation only after VM acceptance, use Rufus's DD image mode
    to preserve the hybrid partition/EFI structure exactly. This has not yet been
