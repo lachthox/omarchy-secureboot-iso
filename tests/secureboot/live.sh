@@ -5,7 +5,17 @@ mkdir -p out/secure-live work/secure-live work/vm
 (cd out/image && sha256sum -c SHA256SUMS)
 python3 scripts/prepare-secure-live.py
 root=$PWD/work/secure-live
-trap 'rm -f -- "$root/owner.key"; rm -rf -- work/vm' EXIT
+cleanup() {
+  result=$?
+  if [[ -f out/secure-live/before.sha256 ]]; then
+    sha256sum -c out/secure-live/before.sha256 > out/secure-live/final-protected.txt || result=1
+  fi
+  rm -f -- "$root/owner.key"
+  rm -rf -- work/vm
+  trap - EXIT
+  exit "$result"
+}
+trap cleanup EXIT
 umask 077
 openssl req -new -x509 -newkey rsa:3072 -nodes -days 1 -subj '/CN=Ephemeral Omarchy live CI only/' -keyout "$root/owner.key" -out "$root/owner.pem"
 /usr/lib/systemd/ukify build --linux="$root/vmlinuz" --initrd="$root/authenticated-initrd" \

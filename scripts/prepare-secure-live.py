@@ -24,7 +24,8 @@ def extract(source, name):
     return p
 
 
-def entries(data, offset=0):
+def archive(data, offset=0):
+    result = {}
     while data[offset:offset+6] == b'070701':
         fields = [int(data[offset+6+i*8:offset+14+i*8], 16) for i in range(13)]
         size, namesize = fields[6], fields[11]
@@ -32,10 +33,11 @@ def entries(data, offset=0):
         name = data[start:start+namesize-1].decode()
         content = (start+namesize+3)//4*4
         end = content+size
-        if name == 'TRAILER!!!':
-            return
-        yield name.lstrip('./'), data[content:end]
         offset = (end+3)//4*4
+        if name == 'TRAILER!!!':
+            return result, offset
+        result[name.lstrip('./')] = data[content:end]
+    raise RuntimeError('Malformed NEWC archive')
 
 
 def cpio(files):
@@ -61,18 +63,33 @@ ramdisk = extract(initrd[1], 'original-initrd')
 sfs = extract('/arch/x86_64/airootfs.sfs', 'airootfs.sfs')
 expected = hashlib.file_digest(sfs.open('rb'), 'sha256').hexdigest()
 data = ramdisk.read_bytes()
-# mkinitcpio may prepend an uncompressed early microcode CPIO. Locate the
-# following zstd frame, then parse the decompressed NEWC archive inertly.
-if data[:4] == b'\x28\xb5\x2f\xfd':
-    compressed = data
-elif data[:6] == b'070701':
-    magic = data.find(b'\x28\xb5\x2f\xfd')
-    assert magic > 0, 'Unsupported initramfs compression'
-    compressed = data[magic:]
-else:
-    raise RuntimeError('Unsupported initramfs compression/layout')
-unpacked = subprocess.check_output(['zstd', '-dc'], input=compressed)
-contents = dict(entries(unpacked))
+# Walk archive boundaries, never scan for compression magic inside firmware
+# blobs: the ISO contains compressed files inside its early/main archives.
+contents = {}; offset = 0; layout = []
+while offset < len(data):
+    while offset < len(data) and data[offset] == 0:
+        offset += 1
+    if offset == len(data):
+        break
+    layout.append({'offset': offset, 'magic': data[offset:offset+16].hex()})
+    (REPORT/'initramfs-layout.json').write_text(json.dumps(layout, indent=2)+'\n')
+    if data[offset:offset+6] == b'070701':
+        files, offset = archive(data, offset)
+        contents.update(files)
+    else:
+        if data[offset:offset+4] == b'\x28\xb5\x2f\xfd':
+            unpacked = subprocess.check_output(['zstd', '-dc'], input=data[offset:])
+        elif data[offset:offset+2] == b'\x1f\x8b':
+            import gzip
+            unpacked = gzip.decompress(data[offset:])
+        elif data[offset:offset+6] == b'\xfd7zXZ\x00':
+            import lzma
+            unpacked = lzma.decompress(data[offset:])
+        else:
+            raise RuntimeError('Unsupported initramfs compression/layout')
+        files, _ = archive(unpacked)
+        contents.update(files)
+        break
 init = contents['init'].decode()
 (REPORT/'original-init').write_text(init)
 for name in ('config', 'hooks/archiso'):
