@@ -2,7 +2,7 @@
 source scripts/common.sh
 cloud_only
 profile=${1:?Specify inspect, build or test}
-mapfile -t packages < <(python3 - "$profile" <<'PY'
+specifications=$(python3 - "$profile" <<'PY'
 import json,re,sys
 c=json.load(open('configs/tools-ubuntu24.json'))
 for name in c['profiles'][sys.argv[1]]:
@@ -12,6 +12,7 @@ for name in c['profiles'][sys.argv[1]]:
     print(name+'='+version)
 PY
 )
+mapfile -t packages <<< "$specifications"
 (( ${#packages[@]} > 0 ))
 sudo apt-get update -qq
 # Only the disposable GitHub-hosted runner is affected. Unavailable locked

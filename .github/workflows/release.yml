@@ -34,9 +34,11 @@ jobs:
           GH_REPO: ${{ github.repository }}
           BUILD_RUN: ${{ inputs.build_run_id }}
           RELEASE_TAG: ${{ inputs.tag }}
+          RELEASE_KIND: ${{ inputs.release_kind }}
         run: |
           [[ "$BUILD_RUN" =~ ^[0-9]+$ ]]
           [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$ ]]
+          [[ "$RELEASE_KIND" == diagnostic || "$RELEASE_KIND" == production ]]
           gh api "repos/$GH_REPO/actions/runs/$BUILD_RUN" > run.json
           gh api "repos/$GH_REPO/git/ref/tags/$RELEASE_TAG" > tag.json
           python3 - <<'PY'
