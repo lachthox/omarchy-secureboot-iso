@@ -34,6 +34,16 @@ Unsigned payloads, altered cmdlines and revoked/SBAT-incompatible components
 must fail in OVMF tests. Positive tests require firmware with the intended trust
 database, not Secure Boot disabled or firmware in Setup Mode.
 
+Limine's current v12 documentation describes an alternative: enroll the
+BLAKE2B hash of its configuration into the EFI executable before signing it.
+With active Secure Boot and that enrolled hash, it enforces configuration and
+payload hashes and disables editing. Without the enrolled hash, signing the
+executable alone does not enable those integrity guarantees. This behavior must
+be checked against the ISO's actual installed Limine version. Firmware must
+also trust the signing certificate, and an authenticated live kernel still
+needs to authenticate the external SquashFS root. None of these are established
+by the current UEFI smoke tests.
+
 `sbctl` is useful for status, key and signing management, but its enrollment
 commands are not executed automatically. Replacing PK/KEK/db is inappropriate
 for the requested Windows-preserving defaults. Microsoft/OEM certificates must
@@ -55,3 +65,5 @@ The project makes no Vanguard compatibility claim.
 Sources: [upstream Secure Boot design](https://github.com/omacom/omarchy-iso/blob/ef1d3897f63f2e0104e461f7bf0d4bb0456168c9/plans/consumer-secure-boot.md),
 [sbctl](https://github.com/Foxboron/sbctl),
 [Limine configuration](https://github.com/Limine-Bootloader/Limine/blob/trunk/CONFIG.md).
+The version-specific enforcement description is in
+[Limine v12 usage](https://github.com/Limine-Bootloader/Limine/blob/v12.x/USAGE.md).

@@ -17,14 +17,12 @@ concurrency:
   group: release
   cancel-in-progress: false
 jobs:
-  validate:
+  gate:
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     outputs:
       source_sha: ${{ steps.gate.outputs.source_sha }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          persist-credentials: false
       - id: gate
         env:
           GH_TOKEN: ${{ github.token }}
@@ -43,58 +41,60 @@ jobs:
           assert r['path']=='.github/workflows/build-iso.yml'
           with open(os.environ['GITHUB_OUTPUT'],'a') as f: f.write('source_sha='+r['head_sha']+'\n')
           PY
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+  publish:
+    needs: gate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Download tested image once
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
           name: diagnostic-iso
           path: release
           run-id: ${{ inputs.build_run_id }}
           github-token: ${{ github.token }}
-      - name: Enforce production acceptance and GitHub asset size limit
+      - name: Validate acceptance metadata and bytes before exposing storage credentials
         env:
           BUILD_RUN: ${{ inputs.build_run_id }}
-          SOURCE_SHA: ${{ steps.gate.outputs.source_sha }}
+          SOURCE_SHA: ${{ needs.gate.outputs.source_sha }}
         run: |
           cd release
           sha256sum -c SHA256SUMS
           python3 - <<'PY'
-          import json,os,pathlib
+          import json,os
           m=json.load(open('build-metadata.json'))
           assert m['commit']==os.environ['SOURCE_SHA'] and m['run_id']==os.environ['BUILD_RUN']
           assert m['profile']=='production', 'Diagnostic images cannot be published as production installers'
           assert m.get('secure_boot_supported') is True
           assert m.get('disk_protection_validated') is True
           assert m.get('full_installation_validated') is True
-          images=list(pathlib.Path('.').glob('*.iso')); assert len(images)==1
-          assert images[0].stat().st_size < 2*1024**3, 'GitHub asset exceeds 2 GiB; approved external single-ISO hosting is required'
           PY
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
-        with:
-          name: release-validated
-          path: release/
-          compression-level: 0
-          retention-days: 1
-  publish:
-    needs: validate
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
-        with:
-          name: release-validated
-          path: release
-      - name: Publish only validated artifacts
+      - name: Upload one flashable ISO and verify its public SHA256
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+          RELEASE_BUCKET: ${{ vars.RELEASE_BUCKET }}
+          RELEASE_PUBLIC_BASE_URL: ${{ vars.RELEASE_PUBLIC_BASE_URL }}
+          RELEASE_S3_ENDPOINT: ${{ vars.RELEASE_S3_ENDPOINT }}
+          RELEASE_REGION: ${{ vars.RELEASE_REGION }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.RELEASE_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.RELEASE_SECRET_ACCESS_KEY }}
+        run: bash scripts/publish-object-storage.sh
+      - name: Publish GitHub release with direct ISO download link
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ inputs.tag }}
-          SOURCE_SHA: ${{ needs.validate.outputs.source_sha }}
+          SOURCE_SHA: ${{ needs.gate.outputs.source_sha }}
         run: |
-          cd release
-          sha256sum -c SHA256SUMS
           python3 - <<'PY'
           import json,pathlib
-          m=json.load(open('build-metadata.json'))
-          pathlib.Path('release-notes.md').write_text('Official Omarchy '+m['upstream']['version']+' derivative.\n\nBuild commit: '+m['commit']+'\n\nVerify SHA256SUMS before flashing with Rufus. Physical firmware, BitLocker and Vanguard compatibility remain subject to the documented validation limitations. GPU unlock is experimental and opt-in. See repository installation and recovery documentation.\n')
+          root=pathlib.Path('release'); m=json.loads((root/'build-metadata.json').read_text()); url=(root/'iso-download-url.txt').read_text().strip()
+          (root/'release-notes.md').write_text('Official Omarchy '+m['upstream']['version']+' derivative.\n\n[Download the single Rufus-flashable ISO]('+url+')\n\nBuild commit: '+m['commit']+'\n\nVerify SHA256SUMS before flashing. Physical firmware, BitLocker and Vanguard compatibility require separate validation. GPU unlock is experimental and opt-in. See repository installation and recovery documentation.\n')
           PY
-          gh release create "$RELEASE_TAG" --target "$SOURCE_SHA" --title "$RELEASE_TAG" --notes-file release-notes.md ./*.iso SHA256SUMS build-metadata.json
+          gh release create "$RELEASE_TAG" --target "$SOURCE_SHA" --title "$RELEASE_TAG" --notes-file release/release-notes.md release/SHA256SUMS release/build-metadata.json release/iso-download-url.txt release/storage-tool-version.txt
