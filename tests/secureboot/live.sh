@@ -70,8 +70,9 @@ mkdir -p work/shim
 (cd work/shim && apt-get download shim-signed=1.58+15.8-0ubuntu1)
 dpkg-deb -x work/shim/shim-signed_*.deb work/shim/package
 find work/shim/package -type f > out/secure-live/shim-package-files.txt
-shim=work/shim/package/usr/lib/shim/shimx64.efi.signed
-[[ -f $shim ]]
+shim=work/shim/package/usr/lib/shim/shimx64.efi.signed.latest
+if [[ ! -f $shim ]]; then shim=work/shim/package/usr/lib/shim/shimx64.efi.dualsigned; fi
+[[ -f $shim ]] || { echo 'No Microsoft-signed shim binary found in the pinned package' >&2; exit 1; }
 sbverify --list "$shim" > out/secure-live/microsoft-shim-signatures.txt
 grep -q Microsoft out/secure-live/microsoft-shim-signatures.txt
 mcopy -o -i "$root/esp.img" "$shim" ::/EFI/BOOT/BOOTX64.EFI

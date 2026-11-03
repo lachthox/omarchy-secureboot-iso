@@ -2,7 +2,12 @@ name: Actual Omarchy Secure Boot live acceptance
 on:
   push:
     branches: [codex/guarded-wizard]
-    paths: ['.github/workflows/secure-live.yml']
+    paths:
+      - '.github/workflows/secure-live.yml'
+      - '.github/actions/secure-live-attempt/**'
+      - 'scripts/prepare-secure-live.py'
+      - 'tests/secureboot/**'
+      - 'tests/qemu/security-probe.py'
   workflow_dispatch:
 permissions:
   contents: read

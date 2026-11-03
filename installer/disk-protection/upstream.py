@@ -39,6 +39,11 @@ def apply():
     # register, delete or reorder firmware boot entries on a dual-boot machine.
     replace('/usr/share/omarchy-iso/orchestrator/phases_impl.py',
             'c43a393c99b90d458e85ad91de2ddc31ba687960844d4314709a386229767e34', [(
+                '''            f"cryptdevice=UUID={storage['luks_uuid']}:omarchy_root "
+''',
+                '''            f"rd.luks.name={storage['luks_uuid']}=omarchy_root "
+            f"cryptdevice=UUID={storage['luks_uuid']}:omarchy_root "
+''', 1), (
                 '    _register_limine_efi_entry(disk, part, loader, pre_state=pre_state)',
                 '    # Guarded installation: firmware registration is deliberately omitted.', 1), (
                 '''        post = _read_efibootmgr()
