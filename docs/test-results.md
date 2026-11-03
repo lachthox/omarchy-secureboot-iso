@@ -17,6 +17,7 @@ used synthetic regular-file-backed QEMU drives, never host block devices.
 | [Actual signed live payload](https://github.com/lachthox/omarchy-secureboot-iso/actions/runs/41642803460) | Complete live acceptance passed with enforcing OVMF, authenticated live root and Microsoft shim/MOK trust; this is not installed-system or hardware acceptance |
 | [Corrected guarded wizard acceptance](https://github.com/lachthox/omarchy-secureboot-iso/actions/runs/41645933032) | Read-only audit, actual unencrypted/encrypted installation and installed boot, and forced writer interruption passed |
 | [Actual signed installed-system acceptance](https://github.com/lachthox/omarchy-secureboot-iso/actions/runs/41653839295) | Real encrypted installed-system key generation/signing/update, signing-failure preservation, Microsoft shim/MOK enforcing boot, intact-PE initramfs tamper rejection and independent recovery boot passed |
+| [Current diagnostic image](https://github.com/lachthox/omarchy-secureboot-iso/actions/runs/41655316192) | Rebuilt image verified, runner-local VM smoke tests passed, and diagnostic-iso artifact uploaded with the read-only hardware-validation menu entry; not signed physical-installation media |
 
 The low-level sandbox tests actually attempted writable opens on both protected
 disks and their partitions, including aliases for the same device numbers. Those
