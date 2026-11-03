@@ -25,6 +25,9 @@ class WizardSafety(unittest.TestCase):
     def test_blank_selection_cancels(self):
         self.invoke(iter(['']))
 
+    def test_hardware_audit_never_requests_erasure_or_secrets(self):
+        self.invoke(iter(['/dev/disk/by-id/wwn-c','LINUX-C']),audit=True)
+
     def test_mismatched_erasure_refuses(self):
         with self.assertRaises(Refused):
             self.invoke(iter(['/dev/disk/by-id/wwn-c','LINUX-C','yes']))

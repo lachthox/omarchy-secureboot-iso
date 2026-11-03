@@ -49,7 +49,7 @@ def launch():
     parts=fresh['OMARCHYTESTC'].get('children',[])
     assert len(parts)==2
     command=list(base)
-    unit='omarchy-ci-upstream-'+str(os.getpid())+'.service'
+    unit='omarchy-guarded-'+str(os.getpid())+'.service'
     command+=['--unit='+unit]
     for serial,d in fresh.items():
         mode='rw' if serial=='OMARCHYTESTC' else 'r'

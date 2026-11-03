@@ -13,7 +13,7 @@ from policy import Refused, plan, reasons, revalidate
 from runner import install
 
 
-def main(read=input, secret=getpass.getpass, discover=inventory, acceptance=None):
+def main(read=input, secret=getpass.getpass, discover=inventory, acceptance=None, audit=False):
     print('Omarchy guarded setup | Ctrl+C cancels\n', flush=True)
     disks = discover()
     for d in disks:
@@ -26,6 +26,13 @@ def main(read=input, secret=getpass.getpass, discover=inventory, acceptance=None
         print('Cancelled before any disk changes.')
         return
     serial = read('Type the complete serial of the Crucial destination: ').strip()
+    if audit:
+        # Planning is pure. Explicitly preview erasure of an ordinary target
+        # data filesystem without asking for permission to perform any writes.
+        proposed = plan(disks, target, serial, erase_data=True)
+        print(json.dumps(proposed, indent=2), flush=True)
+        print('READ_ONLY_HARDWARE_VALIDATION_COMPLETE: no installation was started.', flush=True)
+        return
     erase = read('To erase ALL data and partitions on that SSD, type ERASE '+serial+': ').strip()
     if erase != 'ERASE '+serial:
         raise Refused('Whole-disk erasure was not confirmed')
@@ -59,7 +66,9 @@ def main(read=input, secret=getpass.getpass, discover=inventory, acceptance=None
 
 if __name__ == '__main__':
     try:
-        main()
+        if sys.argv[1:] not in ([], ['--audit']):
+            raise Refused('Unknown setup option')
+        main(audit=sys.argv[1:] == ['--audit'])
     except (Refused, RuntimeError, KeyboardInterrupt, EOFError) as exc:
         print(f'Stopped: {exc}', file=sys.stderr)
         raise SystemExit(1)

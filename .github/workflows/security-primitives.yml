@@ -2,7 +2,7 @@ name: Firmware signature and update transaction acceptance
 on:
   push:
     branches: [codex/guarded-wizard]
-    paths: ['tests/secureboot/**', 'installer/secureboot/**', '.github/workflows/security-primitives.yml']
+    paths: ['tests/secureboot/firmware*', 'tests/secureboot/test_bootstore.py', 'installer/secureboot/**', '.github/workflows/security-primitives.yml']
   workflow_dispatch:
   workflow_call:
 permissions:

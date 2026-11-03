@@ -291,9 +291,24 @@ def writer():
         print('GUARDED_WIZARD_TARGET_INSTALL_OK', flush=True)
 
 
+def release_target_mounts():
+    if subprocess.run(['mountpoint','-q','/mnt']).returncode:
+        return
+    # Hibernation setup enables this target-local file globally even though
+    # the installer's mounts are private. Release it before destroying the
+    # namespace, so the encrypted backing device can actually be closed.
+    active = [line.split()[0] for line in pathlib.Path('/proc/swaps').read_text().splitlines()[1:]]
+    if '/mnt/swap/swapfile' in active:
+        subprocess.run(['swapoff','/mnt/swap/swapfile'],check=True)
+    subprocess.run(['umount','--recursive','/mnt'],check=True)
+
+
 if __name__ == '__main__':
     if sys.argv[1:] == ['--writer']:
-        writer()
+        try:
+            writer()
+        finally:
+            release_target_mounts()
     elif len(sys.argv) == 3 and sys.argv[1] == '--prepare-crypt':
         password = sys.stdin.buffer.read()
         if not password:
