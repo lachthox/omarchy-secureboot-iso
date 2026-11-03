@@ -10,7 +10,7 @@ SCRIPT = pathlib.Path(__file__).resolve().parents[2]/'tests/qemu/boot-installed.
 
 
 class EncryptedBootInput(unittest.TestCase):
-    def run_boot(self, chunks):
+    def run_boot(self, chunks, scenario='wizard-encrypted'):
         events = []
         process = Mock()
         process.stdin.write.side_effect = lambda value: events.append(('write', value))
@@ -22,7 +22,7 @@ class EncryptedBootInput(unittest.TestCase):
         log = io.BytesIO()
         log.close = lambda: None
         with patch.dict('os.environ', {'GITHUB_ACTIONS': 'true', 'RUNNER_ENVIRONMENT': 'github-hosted'}), \
-                patch('sys.argv', [str(SCRIPT), '--scenario', 'wizard-encrypted', '--log', 'unused',
+                patch('sys.argv', [str(SCRIPT), '--scenario', scenario, '--log', 'unused',
                                    '--', 'qemu-system-x86_64']), \
                 patch('subprocess.Popen', return_value=process), \
                 patch('selectors.DefaultSelector', return_value=selector), \
@@ -44,6 +44,10 @@ class EncryptedBootInput(unittest.TestCase):
     def test_does_not_send_password_for_unrelated_passphrase_text(self):
         with self.assertRaisesRegex(RuntimeError, 'never requested'):
             self.run_boot([b'Kernel command line contains passphrase diagnostics\n'])
+
+    def test_signed_installed_boot_also_requires_a_complete_luks_prompt(self):
+        events = self.run_boot([b'Enter passphrase for /dev/sdb2: '], scenario='wizard-signed')
+        self.assertEqual(events, [('sleep', 0.5), ('write', b'VM-only-public-test-passphrase\n')])
 
 
 if __name__ == '__main__':

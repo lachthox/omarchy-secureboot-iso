@@ -1,0 +1,46 @@
+name: Actual installed-system signing and recovery acceptance
+on:
+  push:
+    branches: [codex/guarded-wizard]
+    paths:
+      - '.github/workflows/secure-installed.yml'
+      - 'installer/secureboot/**'
+      - 'scripts/prepare-installed-tools.sh'
+      - 'tests/secureboot/installed.sh'
+      - 'tests/qemu/installed-signed*'
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: secure-installed-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  installed:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - run: bash scripts/install-tools.sh build
+      - run: bash scripts/prepare-runner-space.sh
+      - name: Prepare disposable VM signing tools
+        run: |
+          python3 -m venv --system-site-packages work/secureboot-tools
+          work/secureboot-tools/bin/pip install --no-deps virt-firmware==26.10 pefile==2024.8.26
+          bash scripts/prepare-installed-tools.sh
+      - name: Download one verified existing image
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/download-artifact.py --repository "$GITHUB_REPOSITORY" --run 41615225482 --destination out/image
+      - name: Install, sign, update, reject tampering and boot recovery
+        run: env SCENARIO=wizard-signed bash tests/qemu/boot.sh
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        if: always()
+        with:
+          name: signed-installed-reports
+          path: |
+            out/qemu/
+            out/installed-shim-signatures.txt
+          retention-days: 14

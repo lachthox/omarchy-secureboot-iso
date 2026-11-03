@@ -15,6 +15,7 @@ used synthetic regular-file-backed QEMU drives, never host block devices.
 | [Published diagnostic release](https://github.com/lachthox/omarchy-secureboot-iso/releases/tag/v0.1.0-diagnostic.1) | Five GitHub-hosted parts, manifest, Windows helper, full/per-part checksums and metadata published |
 | [Actual guarded wizard](https://github.com/lachthox/omarchy-secureboot-iso/actions/runs/41642803574) | Read-only audit and unencrypted install/installed boot passed; encrypted installation completed but its reboot timed out at the passphrase prompt; interruption case was skipped |
 | [Actual signed live payload](https://github.com/lachthox/omarchy-secureboot-iso/actions/runs/41642803460) | Complete live acceptance passed with enforcing OVMF, authenticated live root and Microsoft shim/MOK trust; this is not installed-system or hardware acceptance |
+| [Corrected guarded wizard acceptance](https://github.com/lachthox/omarchy-secureboot-iso/actions/runs/41645933032) | Read-only audit, actual unencrypted/encrypted installation and installed boot, and forced writer interruption passed |
 
 The low-level sandbox tests actually attempted writable opens on both protected
 disks and their partitions, including aliases for the same device numbers. Those
@@ -60,13 +61,22 @@ The public prerelease is **diagnostic only**. It is not an installation product
 for the target desktop and will not boot under an unmodified stock Secure Boot
 policy. Do not weaken Windows security to use this prototype.
 
-The real guarded wizard has installed and booted an unencrypted synthetic target.
-Its encrypted installed-boot and interrupted-writer cases remain acceptance gates.
+The real guarded wizard has installed and booted unencrypted and encrypted
+synthetic targets; its interrupted-writer test also passed.
 The passphrase driver now waits for the complete cryptsetup prompt and allows
 terminal setup to finish before sending input: cryptsetup prints the prompt
 before disabling echo with TCSAFLUSH, which can discard an immediate response.
 The signed installed-system chain, interactive owner enrollment, real signed
 updates/recovery and NVIDIA module signing still require acceptance tests.
+
+The **Actual installed-system signing and recovery acceptance** workflow now
+exercises the real machine-local key-generation and update scripts on the
+encrypted installed guest. It checks a successful update and a signing failure,
+then boots the signed current and independent recovery UKIs through Microsoft
+shim/MOK and rejects a modified initramfs. Its tooling share is read-only; the
+ephemeral private key stays inside the disposable encrypted target, which is not
+uploaded. This workflow is pending until its actual run succeeds. It does not
+test interactive MOK enrollment or an automatic recovery selector.
 
 GPU Unlock remains disabled; source preparation, compatibility checks, recovery
 design and benchmark tooling exist, but target RTX 3070 performance/thermal/power

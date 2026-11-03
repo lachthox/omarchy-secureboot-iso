@@ -30,7 +30,7 @@ try:
                     continue
                 log.write(chunk); log.flush()
                 recent = (recent+chunk)[-16384:]
-                if (args.scenario == 'wizard-encrypted' and not sent
+                if (args.scenario in ('wizard-encrypted', 'wizard-signed') and not sent
                         and re.search(rb'Enter passphrase for /dev/[A-Za-z0-9/_-]+: $', recent)):
                     # cryptsetup prints its prompt before TCSAFLUSH disables echo
                     # and discards queued input. Model a human's response delay.
@@ -41,7 +41,7 @@ try:
                 break
     if process.returncode:
         raise RuntimeError('QEMU installed boot exited with '+str(process.returncode))
-    if args.scenario == 'wizard-encrypted' and not sent:
+    if args.scenario in ('wizard-encrypted', 'wizard-signed') and not sent:
         raise RuntimeError('Encrypted boot never requested the test passphrase')
 finally:
     if process.poll() is None:

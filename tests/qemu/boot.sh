@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 source scripts/common.sh
 cloud_only
-[[ $SCENARIO =~ ^(cdrom|usb|reordered|invalid|install|interrupted|wizard|wizard-encrypted|wizard-interrupted|wizard-audit)$ ]]
+[[ $SCENARIO =~ ^(cdrom|usb|reordered|invalid|install|interrupted|wizard|wizard-encrypted|wizard-signed|wizard-interrupted|wizard-audit)$ ]]
 report=out/qemu/$SCENARIO
 mkdir -p work/vm out/qemu
 mkdir -p "$report"
@@ -103,15 +103,20 @@ elif [[ $SCENARIO == install || $SCENARIO == wizard* ]]; then
     grep -q 'GUARDED_UPSTREAM_INSTALL_OK' "$report/serial.log"
     grep -q 'WINDOWS_NVRAM_ENTRY_PRESERVED' "$report/serial.log"
   fi
+  installed_shares=()
+  if [[ $SCENARIO == wizard-signed ]]; then
+    installed_shares=(-virtfs "local,path=$PWD/work/installed-tools,mount_tag=omarchy-signing-tools,security_model=none,readonly=on")
+  fi
   python3 tests/qemu/boot-installed.py --scenario "$SCENARIO" --log "$report/installed-serial.log" -- \
     qemu-system-x86_64 -machine q35 "${accel[@]}" -m 8192 -smp 4 \
     -drive if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.fd \
-    -drive if=pflash,format=raw,file=work/vm/vars.fd "${disks[@]}" \
+    -drive if=pflash,format=raw,file=work/vm/vars.fd "${disks[@]}" "${installed_shares[@]}" \
     -boot c -display none -serial stdio -monitor none -nic none -no-reboot \
     > "$report/installed-qemu.log" 2>&1
   sha256sum -c "$report/protected-before.sha256" > "$report/protected-after-installed-boot.txt"
   grep -q OMARCHY_INSTALLED_UEFI_BOOT_OK "$report/installed-serial.log"
   if grep -q OMARCHY_INSTALLED_BOOT_FAILED "$report/installed-serial.log"; then exit 1; fi
+  if [[ $SCENARIO == wizard-signed ]]; then source tests/secureboot/installed.sh; fi
   printf 'Upstream install and installed-system UEFI boot passed; protected bytes and Windows NVRAM entry unchanged.\n' > "$report/result.txt"
 else
   printf 'UEFI boot and kernel device-write boundary passed; protected bytes unchanged. No installation performed.\n' > "$report/result.txt"
