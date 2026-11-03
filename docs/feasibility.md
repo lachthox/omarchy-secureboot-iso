@@ -66,6 +66,11 @@ Microsoft-trusted chain. Signing a custom EFI file or a UKI does not make a
 stock Windows firmware trust it. Preserve Microsoft/OEM trust and TPM state;
 do not silently enroll replacement keys. Production Secure Boot release remains
 blocked pending verified boot policy, trust enrollment and update/recovery tests.
+The completed EFI audit found no signature tables in either original
+`BOOTx64.EFI` or `BOOTIA32.EFI`. The offline mirror bundles Limine 12.9.3 and
+limine-mkinitcpio-hook 1.40.0; the installed Limine path is distinct from the
+live ISO's GRUB path. Preserving the original unsigned EFI files cannot provide
+stock Secure Boot support.
 
 Sources: [official release](https://github.com/omacom/omarchy/releases/tag/v4.0.6),
 [official ISO sources](https://github.com/omacom/omarchy-iso),

@@ -20,10 +20,13 @@ same runner before uploading it once: no ISO downloads between boot scenarios.
 The slower full unattended-install test is opt-in and does not block a separate
 quick build. **Retest an existing ISO artifact** downloads once for all scenarios.
 
-Actual inspection and diagnostic rebuilding have succeeded. The original hidden
-ESP is byte-identical after rebuilding. Virtual acceptance results remain the
-authority for which tests passed; a successful build alone does not prove an
-installation is safe. See [measured findings](docs/feasibility.md),
+The [first diagnostic prerelease](https://github.com/lachthox/omarchy-secureboot-iso/releases/tag/v0.1.0-diagnostic.1)
+is available. Cloud tests have passed ISO boot, real upstream installation,
+installed-system boot, invalid-target rejection and forced installation
+interruption. Protected synthetic disks remained unchanged. The original hidden
+ESP is byte-identical after rebuilding. These are VM results; the production
+interactive installer, Secure Boot chain and GPU unlock remain gated.
+See [verified results and timings](docs/test-results.md), [measured findings](docs/feasibility.md),
 [architecture](docs/architecture.md), [security model](docs/security-model.md),
 [installation](docs/installation.md), [recovery](docs/recovery.md) and
 [release downloads](docs/release-hosting.md).
