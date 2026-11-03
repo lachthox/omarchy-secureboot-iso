@@ -62,6 +62,7 @@ kernel = extract(linux[1], 'vmlinuz')
 ramdisk = extract(initrd[1], 'original-initrd')
 sfs = extract('/arch/x86_64/airootfs.sfs', 'airootfs.sfs')
 expected = hashlib.file_digest(sfs.open('rb'), 'sha256').hexdigest()
+expected512 = hashlib.file_digest(sfs.open('rb'), 'sha512').hexdigest()
 data = ramdisk.read_bytes()
 # Walk archive boundaries, never scan for compression magic inside firmware
 # blobs: the ISO contains compressed files inside its early/main archives.
@@ -95,37 +96,24 @@ init = contents['init'].decode()
 for name in ('config', 'hooks/archiso'):
     if name in contents:
         (REPORT/name.replace('/', '-')).write_bytes(contents[name])
-assert init.count('exec env -i') == 1 and 'switch_root' in init, 'Unexpected initramfs switch_root implementation'
-check = '''
-/omarchy-auth-root || {
-    echo 'OMARCHY_LIVE_ROOT_AUTHENTICATION_FAILED' >/dev/console
-    poweroff -f
-    while :; do sleep 60; done
-}
+archiso = contents['hooks/archiso'].decode()
+anchor = '    img_loopdev="$(losetup --find --show --read-only -- "${img}")"'
+assert archiso.count(anchor) == 1, 'Unsupported ArchISO root mount path'
+check = '''    /omarchy-auth-root "$img" || {
+        echo 'OMARCHY_LIVE_ROOT_AUTHENTICATION_FAILED' >/dev/console
+        poweroff -f
+        while :; do sleep 60; done
+    }
 '''
-init = init.replace('exec env -i', check+'exec env -i')
+archiso = archiso.replace(anchor, check+anchor)
 auth = '''#!/usr/bin/ash
 set -eu
-count=0
-for loop in /sys/block/loop*/loop/backing_file; do
-    [ -r "$loop" ] || continue
-    source=$(cat "$loop")
-    case "$source" in
-        *airootfs.sfs)
-            case "$source" in
-                /run/archiso/copytoram/*) ;;
-                *) echo 'UNAUTHENTICATED_EXTERNAL_LIVE_ROOT' >/dev/console; exit 1 ;;
-            esac
-            [ -f "$source" ] || exit 1
-            echo 'EXPECTED  '"$source" | sha256sum -c - || exit 1
-            count=$((count+1))
-            ;;
-    esac
-done
-[ "$count" = 1 ] || exit 1
+[ "$#" = 1 ] && [ "$1" = /run/archiso/copytoram/airootfs.sfs ] || exit 1
+grep -q '^copytoram /run/archiso/copytoram tmpfs ' /proc/mounts || exit 1
+echo 'EXPECTED  '"$1" | sha512sum -c - || exit 1
 echo 'OMARCHY_AUTHENTICATED_LIVE_ROOT_OK' >/dev/console
-'''.replace('EXPECTED', expected)
-overlay = cpio([('init', 0o100755, init.encode()), ('omarchy-auth-root', 0o100755, auth.encode())])
+'''.replace('EXPECTED', expected512)
+overlay = cpio([('hooks/archiso', 0o100755, archiso.encode()), ('omarchy-auth-root', 0o100755, auth.encode())])
 (ROOT/'authenticated-initrd').write_bytes(data+b'\0'*(-len(data)%4)+overlay)
 words = [w for w in linux[2].split() if w not in ('quiet', 'splash') and not w.startswith(('copytoram=', 'console='))]
 words += ['copytoram=y', 'console=ttyS0,115200', 'omarchy_ci=1',
@@ -134,5 +122,6 @@ words += ['copytoram=y', 'console=ttyS0,115200', 'omarchy_ci=1',
 (ROOT/'cmdline').write_text(' '.join(words)+'\n')
 (ROOT/'os-release').write_text('ID=omarchy\nNAME="Omarchy Secure Boot cloud acceptance"\n')
 (REPORT/'payloads.json').write_text(json.dumps({'kernel_source': linux[1], 'initramfs_source': initrd[1],
-    'squashfs_sha256': expected, 'external_root_policy': 'Authenticate immutable RAM copy before switch_root',
+    'squashfs_sha256': expected, 'squashfs_sha512': expected512,
+    'external_root_policy': 'Authenticate immutable RAM copy before mounting SquashFS',
     'production_boot_chain_validated': False}, indent=2)+'\n')
