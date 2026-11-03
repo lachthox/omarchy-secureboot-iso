@@ -23,6 +23,7 @@ jobs:
           sudo apt-get install -y --no-install-recommends systemd-boot-efi=255.4-1ubuntu8.18 systemd-ukify=255.4-1ubuntu8.18 zstd
           python3 -m venv --system-site-packages work/secureboot-tools
           work/secureboot-tools/bin/pip install --no-deps virt-firmware==26.10 pefile==2024.8.26
+          apt-cache policy shim-signed > out/shim-package-policy.txt
       - name: Download existing image once
         env:
           GH_TOKEN: ${{ github.token }}

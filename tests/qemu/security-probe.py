@@ -46,3 +46,12 @@ if 'module.sig_enforce=1' in pathlib.Path('/proc/cmdline').read_text().split():
     subprocess.run(['modprobe','dummy'],check=True)
     assert pathlib.Path('/sys/module/dummy').exists()
     print('UNSIGNED_MODULE_REJECTED_SIGNED_MODULE_ACCEPTED',flush=True)
+    if list(pathlib.Path('/sys/firmware/efi/efivars').glob('MokListRT-*')):
+        subprocess.run(['modprobe','-r','dummy'],check=True)
+        control = pathlib.Path('/run/omarchy-signed-controls'); control.mkdir(exist_ok=True)
+        subprocess.run(['mount','-t','9p','-o','trans=virtio,version=9p2000.L,ro,nodev,nosuid',
+                        'omarchy-sb-controls',str(control)],check=True)
+        result = subprocess.run(['insmod',str(control/'untrusted.ko')],capture_output=True,text=True)
+        assert result.returncode != 0 and any(s in result.stderr.lower() for s in ('key was rejected','required key not available')), result.stderr
+        subprocess.run(['insmod',str(control/'owner.ko')],check=True)
+        print('UNTRUSTED_MODULE_REJECTED_MOK_SIGNED_MODULE_ACCEPTED',flush=True)
