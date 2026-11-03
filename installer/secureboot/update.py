@@ -20,7 +20,8 @@ def verify_uki(path):
         raise InvalidBootImage('Signed image lacks a required embedded UKI section')
     with tempfile.TemporaryDirectory(dir='/var/lib/omarchy-custom') as tmp:
         cmdline = pathlib.Path(tmp)/'cmdline'
-        subprocess.run(['objcopy', '--dump-section', '.cmdline='+str(cmdline), str(path)], check=True)
+        subprocess.run(['objcopy', '--dump-section', '.cmdline='+str(cmdline),
+                        str(path), str(pathlib.Path(tmp)/'inspection.efi')], check=True)
         words = cmdline.read_bytes().rstrip(b'\0').decode().split()
         if 'module.sig_enforce=1' not in words or 'lockdown=integrity' not in words:
             raise InvalidBootImage('UKI does not enforce kernel/module integrity')

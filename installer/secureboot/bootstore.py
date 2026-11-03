@@ -63,6 +63,10 @@ def publish(esp, candidate, verify, initialize=False):
             with candidate.open('rb') as src, staged.open('xb') as dst:
                 shutil.copyfileobj(src, dst)
                 dst.flush(); os.fsync(dst.fileno())
+            if staged.stat().st_size != candidate.stat().st_size or sha256(staged) != sha256(candidate):
+                raise InvalidBootImage(
+                    f'ESP staging copy differs from signed candidate: '
+                    f'candidate={candidate.stat().st_size} bytes, staged={staged.stat().st_size} bytes')
             verify(staged)
             if initialize:
                 staged_recovery = pathlib.Path(tmp)/'recovery.efi'
