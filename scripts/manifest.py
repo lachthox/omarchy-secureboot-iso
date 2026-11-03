@@ -26,7 +26,7 @@ for p in sorted(root.rglob('*')):
         if 'squashfs-root/' not in line or not line.startswith('-'):
             continue
         path = line.split('squashfs-root/', 1)[1]
-        if any(x in path for x in ('omarchy-iso', 'configurator', '.automated_script', 'archinstall', 'limine', 'mkinitcpio')):
+        if any(x in path for x in ('omarchy-iso', 'omarchy-cidata', 'configurator', '.automated_script', 'archinstall', 'limine', 'mkinitcpio')):
             candidates.append(path)
     sources = {}
     for index, path in enumerate(candidates):

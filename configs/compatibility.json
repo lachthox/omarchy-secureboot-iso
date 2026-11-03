@@ -1,0 +1,11 @@
+{
+  "version": "4.0.6",
+  "upstream_sha256": "b542db5fecc37395d9af6654a8146ebed225f275ae4d5a6fcf432e40afe7bb88",
+  "squashfs_path": "arch/x86_64/airootfs.sfs",
+  "installer_hashes": {
+    "root/.automated_script.sh": "43b7dd5f6855fdd43965b7334205726496110096459485ad9b9d85db504ef6dc",
+    "root/configurator": "5eddb5c5cf2fcff9c5eae31a7fdfbd062e928044f546527caea8bd99d88b0c2b",
+    "usr/local/bin/omarchy-iso-install": "81cc26433caf533197b9f1594a41af94d13a622e0859b8dd7f14ac0f92129fa5",
+    "usr/share/omarchy-iso/orchestrator/phases_impl.py": "c43a393c99b90d458e85ad91de2ddc31ba687960844d4314709a386229767e34"
+  }
+}

@@ -36,6 +36,7 @@ jobs:
         with:
           name: upstream-inspection-${{ github.run_id }}
           path: out/
+          include-hidden-files: true
           retention-days: 14
       - name: Cleanup extracted data
         if: always()

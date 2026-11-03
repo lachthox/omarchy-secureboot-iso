@@ -1,0 +1,12 @@
+[Unit]
+Description=Custom ISO non-destructive boot validation
+ConditionKernelCommandLine=omarchy_ci=1
+After=local-fs.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/omarchy-custom-diagnostics
+StandardOutput=journal+console
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,43 @@
+name: Test Omarchy ISO with QEMU and OVMF
+on:
+  workflow_call:
+  workflow_dispatch:
+    inputs:
+      build_run_id:
+        description: Successful build run ID from this repository
+        required: true
+        type: string
+permissions:
+  contents: read
+  actions: read
+jobs:
+  boot:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        scenario: [cdrom, usb, reordered]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: diagnostic-iso
+          path: out/image
+          run-id: ${{ inputs.build_run_id || github.run_id }}
+          github-token: ${{ github.token }}
+      - run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends qemu-system-x86 qemu-utils ovmf dosfstools mtools gdisk
+      - name: Boot real rebuilt ISO and hash protected fixture drives
+        env:
+          SCENARIO: ${{ matrix.scenario }}
+        run: bash tests/qemu/boot.sh
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: qemu-${{ matrix.scenario }}
+          path: out/qemu/
+          retention-days: 14
