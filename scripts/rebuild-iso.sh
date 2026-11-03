@@ -13,7 +13,7 @@ xorriso -indev work/source/upstream.iso -outdev out/image/omarchy-custom-diagnos
   -boot_image any replay \
   -map work/custom.sfs /arch/x86_64/airootfs.sfs \
   -map work/airootfs.sha512 /arch/x86_64/airootfs.sha512 \
-  -map work/iso/boot/grub/grub.cfg /boot/grub/grub.cfg \
+  -map work/custom-grub.cfg /boot/grub/grub.cfg \
   -commit -end
 (cd out/image && sha256sum omarchy-custom-diagnostic.iso > SHA256SUMS)
 python3 - <<'PY'

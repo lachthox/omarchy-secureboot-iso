@@ -15,4 +15,4 @@ cmd += ' console=ttyS0,115200 omarchy_ci=1 systemd.mask=getty@tty1.service syste
 text += "\nmenuentry 'Custom ISO diagnostics - no installation' --id 'omarchy-diagnostics' {\n"
 text += cmd + '\n' + initrd[0].strip() + '\n}\n'
 text += "set default='omarchy-diagnostics'\nset timeout=5\nset timeout_style=menu\n"
-p.write_text(text)
+pathlib.Path('work/custom-grub.cfg').write_text(text)
