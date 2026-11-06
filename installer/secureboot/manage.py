@@ -144,13 +144,16 @@ def signed_menu():
     for name, title in (('current','Omarchy'),('recovery','Omarchy stock recovery')):
         (loader/'entries'/f'omarchy-{name}.conf').write_text(
             f'title {title}\nsort-key omarchy-{1 if name == "current" else 2}\nefi /EFI/Omarchy/omarchy-{name}.efi\n')
-    # Upstream's unsigned UKIs are retained outside automatic discovery.
-    upstream = pathlib.Path('/boot/.omarchy-upstream'); upstream.mkdir(exist_ok=True)
-    for p in pathlib.Path('/boot/EFI/Linux').glob('*.efi'):
-        if (upstream/p.name).exists():
-            raise InvalidBootImage('Unsigned upstream backup already exists')
-        p.rename(upstream/p.name)
+    hide_upstream_images()
     run(['sync'])
+
+
+def hide_upstream_images():
+    # Upstream rebuild hooks run on package upgrades too. Retain their latest
+    # images outside automatic discovery on every managed update.
+    upstream = pathlib.Path('/boot/.omarchy-upstream'); upstream.mkdir(exist_ok=True)
+    for p in pathlib.Path('/boot/EFI/Linux').glob('omarchy_*.efi'):
+        os.replace(p,upstream/p.name)
 
 
 def install_hooks():
@@ -230,6 +233,7 @@ def main():
     if args.operation == 'initialize': command += ['--initialize-stock-recovery']
     run(command)
     signed_menu() if args.operation == 'initialize' else refresh_manager()
+    hide_upstream_images()
     install_hooks()
     print('OMARCHY_SIGNED_PACKAGE_POLICY_READY',flush=True)
 

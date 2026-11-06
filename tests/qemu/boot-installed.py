@@ -23,7 +23,7 @@ if args.recovery:
     command += ['-qmp','unix:'+str(qmp_path)+',server=on,wait=off']
 process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
 selector = selectors.DefaultSelector(); selector.register(process.stdout, selectors.EVENT_READ)
-deadline = time.monotonic()+(900 if args.scenario == 'wizard-signed' else 240)
+deadline = time.monotonic()+(180 if args.recovery else 900 if args.scenario == 'wizard-signed' else 240)
 sent = False; recent = b''; recovery_selected = False
 
 def select_recovery():
@@ -38,7 +38,7 @@ def select_recovery():
                 if 'error' in answer: raise RuntimeError(str(answer['error']))
                 if 'return' in answer: return answer['return']
         execute('qmp_capabilities')
-        for key in ('down','ret'):
+        for key in ('home','down','ret'):
             execute('send-key',{'keys':[{'type':'qcode','data':key}],'hold-time':100})
             time.sleep(0.2)
 try:
