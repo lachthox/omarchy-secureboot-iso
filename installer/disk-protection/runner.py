@@ -232,7 +232,7 @@ def writer():
     storage = None
     if mapper:
         verified_mapper(parts[1])
-        subprocess.run(['mkfs.fat', '-F', '32', parts[0]], check=True)
+        subprocess.run(['mkfs.fat', '-F', '32', '-n', 'OMARCHY_OS', parts[0]], check=True)
         subprocess.run(['mkfs.btrfs', '-f', mapper], check=True)
         pathlib.Path('/mnt').mkdir(exist_ok=True)
         subprocess.run(['mount', mapper, '/mnt'], check=True)
@@ -304,9 +304,18 @@ def writer():
             subprocess.run(['arch-chroot','/mnt','/usr/bin/python',
                             '/usr/local/lib/omarchy-custom/secureboot/manage.py','initialize'],check=True)
             public = pathlib.Path('/mnt/var/lib/omarchy-custom/keys/MOK.der')
-            fingerprint = hashlib.sha256(public.read_bytes()).hexdigest()
-            print('Owner certificate SHA256: '+fingerprint,flush=True)
-            print('Firmware enrollment file on the Crucial ESP: EFI/BOOT/omarchy-owner.cer',flush=True)
+            certificate = public.read_bytes()
+            enrollment = {'schema':1,'target':binding,'volume':'OMARCHY_OS',
+                          'file':'EFI/BOOT/omarchy-owner.cer',
+                          'sha256':hashlib.sha256(certificate).hexdigest(),
+                          'mokmanager_sha1':hashlib.sha1(certificate).hexdigest()}
+            (state/'enrollment.json').write_text(json.dumps(enrollment,indent=2)+'\n')
+            (state/'enrollment.json').chmod(0o600)
+            print('Owner certificate SHA256: '+enrollment['sha256'],flush=True)
+            print('MokManager fingerprint (SHA1): '+enrollment['mokmanager_sha1'],flush=True)
+            print('Keep Secure Boot enabled. In MokManager choose Enroll key from disk, then',flush=True)
+            print('OMARCHY_OS -> EFI -> BOOT -> omarchy-owner.cer. View the key and compare',flush=True)
+            print('the fingerprint above before Continue / Yes / Reboot. Cancel if it differs.',flush=True)
             if payload['ci_probe']:
                 print('OMARCHY_LOCAL_MOK_DER='+base64.b64encode(public.read_bytes()).decode(),flush=True)
         if payload['ci_probe']:
