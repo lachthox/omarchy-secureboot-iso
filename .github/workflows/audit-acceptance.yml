@@ -1,5 +1,8 @@
 name: Actual signed-media enrollment and hardware audit
 on:
+  push:
+    branches: [codex/guarded-wizard]
+    paths: ['.github/workflows/audit-acceptance.yml']
   workflow_dispatch:
     inputs:
       build_run_id:
@@ -26,8 +29,10 @@ jobs:
       - name: Reuse the exact signed image
         env:
           GH_TOKEN: ${{ github.token }}
-          BUILD_RUN: ${{ inputs.build_run_id }}
-        run: python3 scripts/download-artifact.py --repository "$GITHUB_REPOSITORY" --run "$BUILD_RUN" --artifact hardware-validation-iso --destination out/hardware-validation
+          BUILD_RUN: ${{ inputs.build_run_id || '42243201529' }}
+        run: |
+          gh run watch "$BUILD_RUN" --exit-status --interval 15
+          python3 scripts/download-artifact.py --repository "$GITHUB_REPOSITORY" --run "$BUILD_RUN" --artifact hardware-validation-iso --destination out/hardware-validation
       - run: python3 tests/secureboot/mok-ui.py
       - run: env AUDIT_ENROLLED_VARS=work/enrollment/enroll-vars.fd python3 tests/secureboot/audit-media.py
       - name: Retain positive reports before the negative boot
@@ -35,7 +40,7 @@ jobs:
       - run: env AUDIT_TAMPER_ROOT=1 AUDIT_ENROLLED_VARS=work/enrollment/enroll-vars.fd python3 tests/secureboot/audit-media.py
       - name: Bind acceptance to immutable image and certificate
         env:
-          BUILD_RUN: ${{ inputs.build_run_id }}
+          BUILD_RUN: ${{ inputs.build_run_id || '42243201529' }}
         run: |
           python3 - <<'PY'
           import hashlib,json,os,pathlib

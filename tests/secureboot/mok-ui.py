@@ -102,6 +102,13 @@ def test(cancel):
                 for _ in range(4): qmp.key('down')
                 qmp.key('ret'); offset=wait('View key 0',offset)
                 qmp.key('ret'); offset=wait('[Fingerprint]',offset)
+                time.sleep(.5)
+                import base64
+                cert=base64.b64decode(json.loads((IMAGE.parent/'build-metadata.json').read_text())['certificate_der_base64'],validate=True)
+                fingerprint=hashlib.sha1(cert).hexdigest()
+                screen=re.sub(r'\x1b\[[0-?]*[ -/]*[@-~]','',log.read_text(errors='replace')).lower()
+                for half in (fingerprint[:20],fingerprint[20:]):
+                    assert ' '.join(half[i:i+2] for i in range(0,20,2)) in screen, 'MokManager displayed a different certificate fingerprint'
                 qmp.screenshot('enroll-certificate.png')
                 qmp.key('ret'); time.sleep(.5); qmp.key('down'); qmp.key('ret')
                 offset=wait('Enroll the key(s)?',offset)
