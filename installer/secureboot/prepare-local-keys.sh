@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 # Installed-system opt-in. Does not modify firmware variables or enroll keys.
 set -euo pipefail
-[[ $EUID == 0 && ! -d /run/archiso ]]
+[[ $EUID == 0 ]]
+if [[ -d /run/archiso ]]; then
+  grep -Eq '/omarchy-guarded-[[:digit:]]+\.service($|/)' /proc/self/cgroup || exit 1
+fi
 [[ $# == 1 && $1 == --generate-local-mok ]] || {
   echo 'Usage: sudo bash prepare-local-keys.sh --generate-local-mok'; exit 2;
 }
@@ -16,6 +19,7 @@ umask 077
 install -d -m700 "$dest"
 openssl req -new -x509 -newkey rsa:3072 -nodes -days 3650 \
   -subj '/CN=Omarchy machine-local owner key/' \
+  -addext 'extendedKeyUsage=codeSigning' \
   -keyout "$dest/MOK.key" -outform DER -out "$dest/MOK.der"
 openssl x509 -inform DER -in "$dest/MOK.der" -out "$dest/MOK.pem"
 chmod 600 "$dest"/*

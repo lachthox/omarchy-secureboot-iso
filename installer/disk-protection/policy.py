@@ -3,6 +3,8 @@ import hashlib
 import json
 
 TARGET_MODEL = 'CT1000BX500SSD1'
+TARGET_MIN_BYTES = 900_000_000_000
+TARGET_MAX_BYTES = 1_100_000_000_000
 PROTECTED_MODELS = ('990 PRO', 'WDS100T2B0B')
 WINDOWS_FILESYSTEMS = {'ntfs', 'ntfs3', 'bitlocker', 'BitLocker', 'exfat'}
 
@@ -54,7 +56,7 @@ def identity(disk):
     return result
 
 
-def plan(disks, target_id, confirmation_serial):
+def plan(disks, target_id, confirmation_serial, erase_data=False):
     validate_inventory(disks)
     matches = [d for d in disks if d['by_id'] == target_id]
     if len(matches) != 1:
@@ -62,15 +64,24 @@ def plan(disks, target_id, confirmation_serial):
     target = matches[0]
     if normalize(target['model']) != normalize(TARGET_MODEL):
         raise Refused('Only the configured Crucial BX500 model is eligible')
-    if not 900_000_000_000 <= target['size'] <= 1_100_000_000_000:
+    if not TARGET_MIN_BYTES <= target['size'] <= TARGET_MAX_BYTES:
         raise Refused('Unexpected target capacity')
     if target['serial'] != confirmation_serial:
         raise Refused('Typed serial does not match selected disk')
     blocked = reasons(target)
+    # Explicit whole-disk erasure may include an ordinary NTFS/exFAT data
+    # partition (the intended Windows E:). It never overrides Windows boot,
+    # BitLocker, protected hardware, mounts, holders or identity checks.
+    if erase_data and not target.get('windows') and target.get('fstype') not in ('bitlocker', 'BitLocker') and all(
+            not p.get('windows') and p.get('fstype') not in ('bitlocker', 'BitLocker')
+            for p in target.get('partitions', [])):
+        blocked = [r for r in blocked if r not in (
+            'Whole-disk Windows/data filesystem or BitLocker detected',
+            'Windows/data filesystem or BitLocker detected')]
     if blocked:
         raise Refused('; '.join(blocked))
     result = {
-        'schema': 1, 'target': identity(target),
+        'schema': 1, 'target': identity(target), 'erase_existing_data': bool(erase_data),
         'protected': sorted([identity(d) for d in disks if d is not target], key=lambda d: d['by_id']),
         'partition_plan': ['GPT on target only', '1 MiB alignment', '2 GiB FAT32 ESP on target', 'Remaining space: Omarchy Btrfs root'],
         'firmware_variables': 'no writes permitted', 'gpu_unlock': False,
@@ -86,7 +97,7 @@ def digest(value):
 def revalidate(saved, disks):
     if saved.get('digest') != digest(saved):
         raise Refused('Plan was changed after confirmation')
-    current = plan(disks, saved['target']['by_id'], saved['target']['serial'])
+    current = plan(disks, saved['target']['by_id'], saved['target']['serial'], saved.get('erase_existing_data', False))
     if current != saved:
         raise Refused('Storage identity or protected-disk set changed; reconfirm the plan')
     return next(d for d in disks if d['by_id'] == saved['target']['by_id'])

@@ -15,7 +15,7 @@ def devices():
     assert vendor in ('QEMU','Bochs'), 'This destructive test is VM-only'
     data=json.loads(subprocess.check_output(['lsblk','-J','-p','-o','NAME,TYPE,SERIAL,RO,LABEL']))
     def source(d):
-        return d.get('ro') and (d.get('label')=='OMARCHY_202610' or any(p.get('label')=='OMARCHY_202610' for p in d.get('children',[])))
+        return d.get('ro') and (d.get('serial')=='OMARCHY_SB_TEST' or d.get('label')=='OMARCHY_202610' or any(p.get('label')=='OMARCHY_202610' for p in d.get('children',[])))
     raw=[d for d in data['blockdevices'] if d['type']=='disk' and not source(d)]
     assert len(raw)==3, 'Unexpected number of synthetic disks'
     result={d.get('serial'):d for d in raw}
@@ -54,6 +54,12 @@ def child():
 
 
 def parent():
+    probe=pathlib.Path(__file__).with_name('security-probe.py')
+    if probe.exists():
+        subprocess.run([sys.executable,str(probe)],check=True)
+    if any(pathlib.Path('/dev/disk/by-label/'+label).exists() for label in ('wizard','wizard-encrypted','wizard-signed','wizard-interrupted','wizard-audit','wizard-finalized')):
+        subprocess.run([sys.executable,str(pathlib.Path(__file__).with_name('wizard-acceptance.py'))],check=True)
+        return
     disks=devices()
     command=['systemd-run','--quiet','--wait','--pipe','--collect',
         '--property=DevicePolicy=closed','--property=NoNewPrivileges=yes',

@@ -1,69 +1,70 @@
 # Security model
 
-The diagnostic image is not a protected installation product. Pure policy tests
-do not prove a privileged upstream installer cannot write the wrong disk.
+The guarded wizard retains the official Omarchy installer, adapted through
+version-checked patches. Installation runs in a dedicated systemd cgroup with
+kernel device restrictions: the confirmed target and its verified descendants
+may be written; every other disk is read-only. Private mount/PID namespaces,
+blocked privileged D-Bus/systemd sockets and BPF/ptrace restrictions keep the
+upstream writer inside that boundary. A separate bounded preparation stage
+creates only the target's encrypted mapping. Topology changes stop the writer.
 
-The planned enforcement boundary must wrap both the configurator (its free-space
-path already writes partitions) and the Python installer, including unattended
-`cidata` entry. It must allow writes only to a freshly revalidated target and its
-verified descendants. All other disks are protected by default, including
-unknown disks. Block-device access must be kernel-enforced and tested with
-attempted writes, not just filtered command names or a UI restriction. Existing
-mounts, device-mapper descendants, hotplug and inherited descriptors need tests.
-Production installation stays disabled until that boundary is implemented.
+Policy requires model, serial, capacity and a stable by-id identity. Samsung and
+WD protected models, Windows/BitLocker volumes, existing ESPs, mounted/mapped
+disks and ambiguous identities are refused. Explicit whole-disk erasure can
+allow ordinary data partitions on the Crucial, but cannot override protected
+identities or a Windows boot partition. Even an interrupted installation's
+existing ESP requires review before reinstalling.
 
-The policy requires model, serial, size and a stable by-id identity. Protected
-models, Windows/BitLocker volumes, existing ESPs, mounted/mapped disks and
-ambiguous identities are rejected. It is deliberately conservative: even a
-previous Omarchy ESP requires manual review before reinstalling. Enumeration
-changes alone must not change the chosen disk. The plan must be revalidated
-immediately before writes and on topology changes. Logs must not contain
-passwords, LUKS secrets, private keys or Tailscale tokens.
+Actual guest tests attempt protected writable opens, including device aliases,
+run the real upstream writer, interrupt real package writes and hash protected
+fixtures before and after. They do not identify the user's actual disks.
+Physical installation remains disabled until the read-only hardware boot
+confirms their identities.
 
 ## Secure Boot
 
-An OpenPGP-authenticated download is distinct from firmware Secure Boot trust.
-Current diagnostic builds preserve upstream boot binaries, without promising
-they boot under an enabled stock Windows Secure Boot policy.
+The implemented chain is Microsoft-signed Ubuntu shim 15.8, its matching
+MokManager, an owner-signed UKI or signed systemd-boot menu, and an owner-signed
+kernel with embedded initramfs and command line. Kernel module signatures and
+integrity lockdown are mandatory. The live UKI authenticates the exact SquashFS
+copy in RAM before mounting it. Actual enforcing OVMF tests supplement small
+firmware fixtures for modified payload and command-line rejection.
 
-Preferred research chain: a suitably licensed Microsoft-trusted shim, its matching
-MokManager, a verifying second stage and machine-local signed UKIs. The entire
-chain must enforce payload signatures, embedded initramfs and embedded command
-line. Merely signing Limine does not prove it enforces every downstream input.
-Unsigned payloads, altered cmdlines and revoked/SBAT-incompatible components
-must fail in OVMF tests. Positive tests require firmware with the intended trust
-database, not Secure Boot disabled or firmware in Setup Mode.
+The hardware audit media carries only a public build certificate. Its ephemeral
+private key is generated outside the live filesystem and discarded after
+signing. The installed system generates a different machine-local owner key on
+its encrypted root; that private key stays root-only there. Only its public
+certificate is copied to the Crucial's ESP for explicit owner enrollment.
 
-Limine's current v12 documentation describes an alternative: enroll the
-BLAKE2B hash of its configuration into the EFI executable before signing it.
-With active Secure Boot and that enrolled hash, it enforces configuration and
-payload hashes and disables editing. Without the enrolled hash, signing the
-executable alone does not enable those integrity guarantees. This behavior must
-be checked against the ISO's actual installed Limine version. Firmware must
-also trust the signing certificate, and an authenticated live kernel still
-needs to authenticate the external SquashFS root. None of these are established
-by the current UEFI smoke tests.
+No workflow replaces PK/KEK/db/dbx, clears TPM, edits Windows BCD, changes
+BitLocker protectors or automatically enrolls trust. Enrollment is a physical
+MokManager confirmation, with a displayed public fingerprint and cancellation.
+A firmware dbx/SBAT policy can reject the pinned shim: this requires a compatible
+updated chain. Windows/BitLocker and Vanguard behavior cannot be established
+by CI.
 
-`sbctl` is useful for status, key and signing management, but its enrollment
-commands are not executed automatically. Replacing PK/KEK/db is inappropriate
-for the requested Windows-preserving defaults. Microsoft/OEM certificates must
-be retained. Shim/MOK avoids replacing platform keys but still requires explicit
-firmware-mediated public certificate enrollment and compatible downstream policy.
+The normal wizard also checks active SecureBoot=1, SetupMode=0, shim validation,
+module signature enforcement and kernel lockdown before collecting installation
+credentials. Release capabilities separately keep physical installation closed.
 
-`prepare-local-keys.sh` optionally creates a per-machine owner key **only on an
-encrypted installed root**. It never enrolls a key. Private keys remain root-only
-on that encrypted root and must be backed up securely offline. Only public
-certificates belong on the ESP or trust-enrollment medium. Never create or
-publish user signing credentials in Actions. VM test keys must be ephemeral and
-must not enter artifacts or caches.
+## Updates and recovery
 
-Guided trust enrollment must display the exact public certificate fingerprint,
-explain the MOK/firmware approval screen and provide an abort path. No TPM clear,
-BitLocker protector change, Windows BCD edit or platform-key reset is automated.
-The project makes no Vanguard compatibility claim.
+Pacman pre-transaction checks verify keys and both existing signed boot images;
+failure aborts the transaction. The post-transaction hook signs external modules,
+builds an embedded UKI, verifies it and atomically publishes current. The initial
+stock recovery UKI and its module tree are retained. The signed menu offers
+current and stock recovery; unsigned upstream-generated entries are retained
+outside automatic discovery. Unsigned fallback deployment hooks are masked so
+normal package updates cannot silently replace the signed shim.
 
-Sources: [upstream Secure Boot design](https://github.com/omacom/omarchy-iso/blob/ef1d3897f63f2e0104e461f7bf0d4bb0456168c9/plans/consumer-secure-boot.md),
-[sbctl](https://github.com/Foxboron/sbctl),
-[Limine configuration](https://github.com/Limine-Bootloader/Limine/blob/trunk/CONFIG.md).
-The version-specific enforcement description is in
-[Limine v12 usage](https://github.com/Limine-Bootloader/Limine/blob/v12.x/USAGE.md).
+Failed signing preserves the previous verified current and recovery images.
+The ESP publication path uses locking, staged files and durability checks.
+Power loss during a package transaction still needs target recovery testing.
+
+Passwords, LUKS secrets, private keys and personal provisioning tokens must never
+enter release artifacts, caches or logs. No local physical disk is accessed by
+development tooling. Heavy work and destructive fixture tests are restricted
+to GitHub-hosted runners and regular-file-backed QEMU disks.
+
+References: [MokManager 15.8](https://github.com/rhboot/shim/blob/15.8/MokManager.c),
+[upstream Omarchy consumer Secure Boot design](https://github.com/omacom/omarchy-iso/blob/ef1d3897f63f2e0104e461f7bf0d4bb0456168c9/plans/consumer-secure-boot.md).

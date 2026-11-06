@@ -11,6 +11,8 @@ initrd = re.search(r'^\s*initrd .*$', entry[1], re.M)
 assert linux and initrd
 cmd = linux[0].strip()
 cmd = re.sub(r'\bquiet\b|\bsplash\b', '', cmd)
+text += "\nmenuentry 'Read-only hardware validation - NO installation' --id 'omarchy-hardware-validation' {\n"
+text += cmd + '\n' + initrd[0].strip() + '\n}\n'
 cmd += ' console=ttyS0,115200 omarchy_ci=1 systemd.mask=getty@tty1.service systemd.mask=serial-getty@ttyS0.service'
 text += "\nmenuentry 'Custom ISO diagnostics - no installation' --id 'omarchy-diagnostics' {\n"
 text += cmd + '\n' + initrd[0].strip() + '\n}\n'

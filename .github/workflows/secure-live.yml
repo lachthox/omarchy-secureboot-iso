@@ -1,0 +1,61 @@
+name: Actual Omarchy Secure Boot live acceptance
+on:
+  push:
+    branches: [codex/guarded-wizard]
+    paths:
+      - '.github/workflows/secure-live.yml'
+      - '.github/actions/secure-live-attempt/**'
+      - 'scripts/prepare-secure-live.py'
+      - 'tests/secureboot/live.sh'
+      - 'tests/secureboot/sign-control.py'
+      - 'tests/qemu/security-probe.py'
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  live:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - run: bash scripts/install-tools.sh build
+      - run: bash scripts/prepare-runner-space.sh
+      - name: Record and install Secure Boot UKI tools
+        run: |
+          apt-cache policy systemd-boot-efi systemd-ukify zstd
+          sudo apt-get install -y --no-install-recommends systemd-boot-efi=255.4-1ubuntu8.18 systemd-ukify=255.4-1ubuntu8.18 zstd
+          python3 -m venv --system-site-packages work/secureboot-tools
+          work/secureboot-tools/bin/pip install --no-deps virt-firmware==26.10 pefile==2024.8.26
+          apt-cache policy shim-signed > out/shim-package-policy.txt
+      - name: Download existing image once
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/download-artifact.py --repository "$GITHUB_REPOSITORY" --run 41615225482 --destination out/image
+      - id: first
+        uses: ./.github/actions/secure-live-attempt
+        with:
+          attempt: '1'
+      - if: steps.first.outputs.outcome != 'success'
+        run: python3 scripts/wait-acceptance-revision.py
+      - id: second
+        if: steps.first.outputs.outcome != 'success'
+        uses: ./.github/actions/secure-live-attempt
+        with:
+          attempt: '2'
+      - if: steps.first.outputs.outcome != 'success' && steps.second.outputs.outcome != 'success'
+        run: python3 scripts/wait-acceptance-revision.py
+      - id: third
+        if: steps.first.outputs.outcome != 'success' && steps.second.outputs.outcome != 'success'
+        uses: ./.github/actions/secure-live-attempt
+        with:
+          attempt: '3'
+      - name: Require an actual successful signed-live boot
+        if: always()
+        env:
+          FIRST: ${{ steps.first.outputs.outcome }}
+          SECOND: ${{ steps.second.outputs.outcome }}
+          THIRD: ${{ steps.third.outputs.outcome }}
+        run: '[[ $FIRST == success || $SECOND == success || $THIRD == success ]]'

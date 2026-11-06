@@ -14,5 +14,10 @@ Required before enabling a production Secure Boot profile:
   the actual kernel's enforcement policy.
 * Retain a working, signed stock UKI after an update/signing failure.
 
-Tests are pending. This file records acceptance criteria; it is not evidence
-that any of them passed. Ephemeral VM private keys must not be uploaded.
+The signed live payload has passed the Microsoft shim/MOK test; see
+[recorded evidence](../../docs/test-results.md). The installed-system workflow
+uses the real signing/update code on an encrypted synthetic target, including
+failure preservation and independent recovery boot. Do not equate adding this
+test with passing it, or pre-enrolled VM MOK with interactive enrollment.
+The remaining criteria above still gate production. Ephemeral VM private keys
+must not be uploaded.

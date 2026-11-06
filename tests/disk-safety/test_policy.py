@@ -34,6 +34,19 @@ class Safety(unittest.TestCase):
         d=fixture(); d[2]['fstype']='BitLocker'
         with self.assertRaises(Refused): plan(d,d[2]['by_id'],'LINUX-C')
 
+    def test_explicit_erasure_allows_only_ordinary_target_data(self):
+        for fs in ('ntfs','exfat'):
+            d=fixture(); d[2]['partitions']=[{'fstype':fs,'windows':False}]
+            p=plan(d,d[2]['by_id'],'LINUX-C',erase_data=True)
+            self.assertTrue(p['erase_existing_data'])
+            self.assertEqual(revalidate(p,d)['serial'],'LINUX-C')
+        for part in ({'fstype':'BitLocker'},{'fstype':'ntfs','windows':True},
+                     {'fstype':'ntfs','esp':True},{'fstype':'ntfs','mounted':True}):
+            d=fixture(); d[2]['partitions']=[part]
+            with self.assertRaises(Refused): plan(d,d[2]['by_id'],'LINUX-C',erase_data=True)
+        for target in fixture()[:2]:
+            with self.assertRaises(Refused): plan(fixture(),target['by_id'],target['serial'],erase_data=True)
+
     def test_partition_changes_require_reconfirmation(self):
         d=fixture(); p=plan(d,d[2]['by_id'],'LINUX-C')
         d[2]['partitions']=[{'fstype':'btrfs','partuuid':'new-partition'}]

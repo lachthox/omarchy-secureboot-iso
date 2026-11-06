@@ -1,0 +1,41 @@
+name: Actual guarded wizard acceptance
+on:
+  push:
+    branches: [codex/guarded-wizard]
+    paths: ['installer/disk-protection/**', 'installer/tui/**', 'tests/qemu/wizard-acceptance.py', 'tests/qemu/boot-installed.py', 'tests/qemu/boot.sh', '.github/workflows/guarded-wizard.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: guarded-wizard-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  wizard:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - run: bash scripts/install-tools.sh test
+      - run: bash scripts/prepare-runner-space.sh
+      - name: Download one verified existing image for all cases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/download-artifact.py --repository "$GITHUB_REPOSITORY" --run 41615225482 --destination out/image
+      - run: (cd out/image && sha256sum -c SHA256SUMS)
+      - name: Read-only hardware-validation entry and actual kernel write denials
+        run: env SCENARIO=wizard-audit ISO_PREVERIFIED=1 bash tests/qemu/boot.sh
+      - name: Actual wizard, upstream installation and installed boot
+        run: env SCENARIO=wizard ISO_PREVERIFIED=1 bash tests/qemu/boot.sh
+      - name: Encrypted descendant boundary and passphrase boot
+        run: env SCENARIO=wizard-encrypted ISO_PREVERIFIED=1 bash tests/qemu/boot.sh
+      - name: Forced interruption of the actual wizard writer
+        run: env SCENARIO=wizard-interrupted ISO_PREVERIFIED=1 bash tests/qemu/boot.sh
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        if: always()
+        with:
+          name: guarded-wizard-reports
+          path: out/qemu/
+          retention-days: 14

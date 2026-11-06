@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
     inputs:
       build_run_id:
-        description: Successful production build and VM test run from main
+        description: Successful image build at a commit merged into main
         required: true
         type: string
       tag:
@@ -11,10 +11,14 @@ on:
         required: true
         type: string
       release_kind:
-        description: Diagnostic prerelease or fully validated production release
+        description: Signed read-only hardware audit, diagnostic, or validated production release
         type: choice
-        options: [diagnostic, production]
+        options: [hardware-validation, diagnostic, production]
         default: diagnostic
+      audit_run_id:
+        description: Successful enrollment/audit acceptance for this exact hardware image
+        required: false
+        type: string
 permissions:
   contents: read
   actions: read
@@ -35,18 +39,33 @@ jobs:
           BUILD_RUN: ${{ inputs.build_run_id }}
           RELEASE_TAG: ${{ inputs.tag }}
           RELEASE_KIND: ${{ inputs.release_kind }}
+          AUDIT_RUN: ${{ inputs.audit_run_id }}
         run: |
           [[ "$BUILD_RUN" =~ ^[0-9]+$ ]]
           [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$ ]]
-          [[ "$RELEASE_KIND" == diagnostic || "$RELEASE_KIND" == production ]]
+          [[ "$RELEASE_KIND" == diagnostic || "$RELEASE_KIND" == production || "$RELEASE_KIND" == hardware-validation ]]
           gh api "repos/$GH_REPO/actions/runs/$BUILD_RUN" > run.json
           gh api "repos/$GH_REPO/git/ref/tags/$RELEASE_TAG" > tag.json
+          if [[ "$RELEASE_KIND" == hardware-validation ]]; then
+            [[ "$AUDIT_RUN" =~ ^[0-9]+$ ]]
+            gh api "repos/$GH_REPO/actions/runs/$AUDIT_RUN" > audit-run.json
+          fi
           python3 - <<'PY'
-          import json,os
+          import json,os,subprocess
           r=json.load(open('run.json'))
-          assert r['conclusion']=='success' and r['head_branch']=='main'
+          assert r['conclusion']=='success'
           assert r['repository']['full_name']==os.environ['GH_REPO']
-          assert r['path']=='.github/workflows/build-iso.yml'
+          hardware=os.environ['RELEASE_KIND']=='hardware-validation'
+          assert r['path']==('.github/workflows/build-hardware-validation.yml' if hardware else '.github/workflows/build-iso.yml')
+          def merged(sha):
+              result=json.loads(subprocess.check_output(['gh','api','repos/'+os.environ['GH_REPO']+'/compare/'+sha+'...main']))
+              assert result['status'] in ('identical','ahead'), 'Tested source must be merged into main'
+          merged(r['head_sha'])
+          if hardware:
+              a=json.load(open('audit-run.json'))
+              assert a['conclusion']=='success' and a['path']=='.github/workflows/audit-acceptance.yml'
+              assert a['repository']['full_name']==os.environ['GH_REPO']
+              merged(a['head_sha'])
           t=json.load(open('tag.json'))
           assert t['object']['type']=='commit' and t['object']['sha']==r['head_sha'], 'Create a lightweight release tag at the verified build commit first'
           with open(os.environ['GITHUB_OUTPUT'],'a') as f: f.write('source_sha='+r['head_sha']+'\n')
@@ -70,18 +89,32 @@ jobs:
             [[ $(cat /tmp/draft-state) == true ]] || { echo 'Refusing to modify an already published release'; exit 1; }
           else
             flags=()
-            if [[ "$RELEASE_KIND" == diagnostic ]]; then flags+=(--prerelease); fi
-            gh release create "$RELEASE_TAG" --draft --verify-tag "${flags[@]}" --title "$RELEASE_TAG" --notes 'Verified image packaging in progress.'
+            if [[ "$RELEASE_KIND" != production ]]; then flags+=(--prerelease); fi
+            title="$RELEASE_TAG"
+            if [[ "$RELEASE_KIND" == hardware-validation ]]; then title+=" (read-only hardware validation)"; fi
+            gh release create "$RELEASE_TAG" --draft --verify-tag "${flags[@]}" --title "$title" --notes 'Verified image packaging in progress.'
           fi
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
+      - name: Prepare hosted packaging space
+        run: bash scripts/prepare-runner-space.sh
       - name: Download tested image once
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           BUILD_RUN: ${{ inputs.build_run_id }}
-        run: python3 scripts/download-artifact.py --repository "$GH_REPO" --run "$BUILD_RUN" --destination release
+          RELEASE_KIND: ${{ inputs.release_kind }}
+        run: |
+          artifact=diagnostic-iso
+          if [[ "$RELEASE_KIND" == hardware-validation ]]; then artifact=hardware-validation-iso; fi
+          python3 scripts/download-artifact.py --repository "$GH_REPO" --run "$BUILD_RUN" --artifact "$artifact" --destination release
+      - name: Download exact-image hardware acceptance receipt
+        if: inputs.release_kind == 'hardware-validation'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          AUDIT_RUN: ${{ inputs.audit_run_id }}
+        run: gh run download "$AUDIT_RUN" --name enrollment-audit-reports --dir acceptance
       - name: Validate test status, source and ISO bytes
         env:
           BUILD_RUN: ${{ inputs.build_run_id }}
@@ -91,7 +124,7 @@ jobs:
           cd release
           sha256sum -c SHA256SUMS
           python3 - <<'PY'
-          import json,os
+          import hashlib,json,os,pathlib
           m=json.load(open('build-metadata.json'))
           assert m['commit']==os.environ['SOURCE_SHA'] and m['run_id']==os.environ['BUILD_RUN']
           if os.environ['RELEASE_KIND']=='production':
@@ -99,6 +132,15 @@ jobs:
               assert m.get('secure_boot_supported') is True
               assert m.get('disk_protection_validated') is True
               assert m.get('full_installation_validated') is True
+          elif os.environ['RELEASE_KIND']=='hardware-validation':
+              assert m['profile']=='hardware-validation' and m['physical_installation_enabled'] is False
+              assert m['secure_boot_supported'] is True
+              proofs=list(pathlib.Path('../acceptance').rglob('acceptance.json')); assert len(proofs)==1
+              a=json.loads(proofs[0].read_text())
+              assert a['build_run_id']==m['run_id'] and a['image_commit']==m['commit']
+              assert a['certificate_sha256']==m['certificate_sha256']
+              assert a['iso_sha256']==hashlib.file_digest(next(pathlib.Path('.').glob('*.iso')).open('rb'),'sha256').hexdigest()
+              assert all(a[k] is True for k in ('mok_enrollment','mok_cancellation','read_only_audit','tampered_root_rejected','all_disks_unchanged'))
           else:
               assert m['profile']=='diagnostic-only'
           PY
@@ -111,6 +153,7 @@ jobs:
           [[ ${#images[@]} == 1 ]]
           python3 scripts/package-release.py "${images[0]}" release-assets --repository "$GH_REPO" --tag "$RELEASE_TAG"
           cp release/build-metadata.json release-assets/
+          if [[ -d acceptance ]]; then find acceptance -name acceptance.json -exec cp {} release-assets/ \;; fi
       - name: Upload draft assets, then publish the complete release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -120,10 +163,40 @@ jobs:
           RELEASE_KIND: ${{ inputs.release_kind }}
         run: |
           python3 - <<'PY'
-          import json,pathlib,os
+          import base64,hashlib,json,pathlib,os,subprocess
           root=pathlib.Path('release-assets'); m=json.loads((root/'build-metadata.json').read_text())
           warning='DIAGNOSTIC PRERELEASE: not a protected installer. Secure Boot and GPU unlock are not enabled. Do not install on physical hardware.\n\n' if os.environ['RELEASE_KIND']=='diagnostic' else ''
           (root/'release-notes.md').write_text(warning+'Official Omarchy '+m['upstream']['version']+' derivative.\n\nDownload Get-OmarchyISO.ps1, then run it with PowerShell. It downloads the split GitHub assets, checks each part, reconstructs one ISO and verifies its full SHA256. Open that ISO in Rufus. Allow about twice the ISO size in free space during reconstruction; cached parts are removed after success.\n\nBuild commit: '+m['commit']+'\n\nThe source ISO boot structures are retained. Physical firmware, BitLocker and Vanguard compatibility require separate validation. See repository installation and recovery documentation.\n')
+          if os.environ['RELEASE_KIND']=='hardware-validation':
+              cert=base64.b64decode(m['certificate_der_base64'],validate=True)
+              assert hashlib.sha256(cert).hexdigest()==m['certificate_sha256']
+              (root/'omarchy-live.cer').write_bytes(cert)
+              sha1=hashlib.sha1(cert).hexdigest()
+              fingerprint='SHA256: '+m['certificate_sha256']+'\nMokManager SHA1: '+sha1+'\n'
+              (root/'CERTIFICATE-FINGERPRINTS.txt').write_text(fingerprint)
+              notes='''SIGNED READ-ONLY HARDWARE VALIDATION PRERELEASE. Installation is disabled. GPU unlock is disabled.
+
+          Download Get-OmarchyISO.ps1 and run:
+
+          ```powershell
+          powershell -NoProfile -ExecutionPolicy Bypass -File .\\Get-OmarchyISO.ps1
+          ```
+
+          The helper resumes split GitHub downloads and verifies every part and the reconstructed ISO. Allow roughly twice the ISO size in free space. Write the resulting ISO to a spare 16 GB or larger USB using Rufus **DD image mode**. Rufus erases that selected USB. Check its identity carefully.
+
+          Keep Secure Boot enabled and use the motherboard's one-time UEFI USB boot entry. The first boot should report a verification failure because this build's certificate is not trusted yet. Enter MokManager, choose **Enroll key from disk**, select the USB's OMARCHY_SB volume, then **EFI → BOOT → omarchy-live.cer**. View the key and compare the MokManager fingerprint below. Continue, confirm enrollment and reboot from the same USB. If the fingerprint differs, cancel. This adds only a Machine Owner Key; do not replace PK/KEK/db/dbx, clear TPM, or disable validation.
+
+          The actual guarded audit lists every disk. Select the Crucial CT1000BX500SSD1, type its complete serial, and photograph the inventory and final plan showing the protected Samsung and WD disks. This image cannot start installation. The JSON report is held only in RAM at /run/omarchy-hardware-validation.json and disappears on reboot.
+
+          VM acceptance covered the exact image's real MokManager enrollment and cancellation, Secure Boot enforcement, keyboard-operated audit, kernel-denied SSD writes and rejection of a modified live filesystem. Physical motherboard trust/revocation policy, actual disk identity, Windows/BitLocker and GPU behavior remain to be checked. Keep Windows recovery information available before firmware boot changes. If firmware rejects the Microsoft-signed shim, stop and use Windows Boot Manager; do not weaken Secure Boot.
+
+          Public certificate fingerprints:
+
+          ```text
+          '''+fingerprint+'''```
+
+          Build and acceptance receipts are attached. Source commit: '''+m['commit']+'\n'
+              (root/'release-notes.md').write_text(notes)
           PY
           gh release edit "$RELEASE_TAG" --notes-file release-assets/release-notes.md
           gh release upload "$RELEASE_TAG" release-assets/*

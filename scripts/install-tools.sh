@@ -14,7 +14,7 @@ PY
 )
 mapfile -t packages <<< "$specifications"
 (( ${#packages[@]} > 0 ))
-sudo apt-get update -qq
+sudo apt-get update -qq -o Acquire::ForceIPv4=true -o Acquire::Retries=2 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20
 # Only the disposable GitHub-hosted runner is affected. Unavailable locked
 # versions fail instead of silently changing the ISO transformation toolchain.
-sudo apt-get install -y --no-install-recommends --allow-downgrades "${packages[@]}"
+sudo apt-get install -y --no-install-recommends --allow-downgrades -o Acquire::ForceIPv4=true -o Acquire::Retries=2 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20 "${packages[@]}"

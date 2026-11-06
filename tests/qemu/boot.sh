@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 source scripts/common.sh
 cloud_only
-[[ $SCENARIO =~ ^(cdrom|usb|reordered|invalid|install|interrupted)$ ]]
+[[ $SCENARIO =~ ^(cdrom|usb|reordered|invalid|install|interrupted|wizard|wizard-encrypted|wizard-signed|wizard-interrupted|wizard-audit|wizard-finalized)$ ]]
 report=out/qemu/$SCENARIO
 mkdir -p work/vm out/qemu
 mkdir -p "$report"
@@ -24,8 +24,13 @@ print(json.dumps({'image_commit':m['commit'],'test_commit':subprocess.check_outp
 PY
 python3 tests/qemu/create-fixtures.py
 if [[ $SCENARIO == install || $SCENARIO == interrupted ]]; then python3 tests/qemu/make-cidata.py; fi
+if [[ $SCENARIO == wizard* ]]; then
+  mkdir -p work/vm/wizard
+  printf 'Synthetic guarded-wizard acceptance\n' > work/vm/wizard/marker
+  xorriso -as mkisofs -V "$SCENARIO" -o work/vm/wizard.iso work/vm/wizard
+fi
 sha256sum work/vm/windows-system.raw work/vm/windows-data.raw > "$report/protected-before.sha256"
-if [[ $SCENARIO == invalid ]]; then sha256sum work/vm/target.raw >> "$report/protected-before.sha256"; fi
+if [[ $SCENARIO == invalid || $SCENARIO == wizard-audit ]]; then sha256sum work/vm/target.raw >> "$report/protected-before.sha256"; fi
 cp /usr/share/OVMF/OVMF_VARS_4M.fd work/vm/vars.fd
 target_serial=OMARCHYTESTC
 if [[ $SCENARIO == invalid ]]; then target_serial=UNRECOGNIZED; fi
@@ -37,6 +42,12 @@ if [[ $SCENARIO == reordered ]]; then
          -drive file=work/vm/windows-data.raw,format=raw,if=none,id=b -device virtio-blk-pci,drive=b,serial=WINDOWS_B
          -drive file=work/vm/windows-system.raw,format=raw,if=none,id=a -device virtio-blk-pci,drive=a,serial=WINDOWS_A)
 fi
+if [[ $SCENARIO == wizard* ]]; then
+  disks=(-device virtio-scsi-pci,id=scsi
+    -drive file=work/vm/windows-system.raw,format=raw,if=none,id=a -device scsi-hd,drive=a,bus=scsi.0,serial=WINDOWS_A,vendor=Samsung,product="990 PRO 2TB"
+    -drive file=work/vm/windows-data.raw,format=raw,if=none,id=b -device scsi-hd,drive=b,bus=scsi.0,serial=WINDOWS_B,vendor=WDC,product=WDS100T2B0B
+    -drive file=work/vm/target.raw,format=raw,if=none,id=c -device scsi-hd,drive=c,bus=scsi.0,serial=OMARCHYTESTC,vendor=Crucial,product=CT1000BX500SSD1)
+fi
 media=(-drive file=out/image/omarchy-custom-diagnostic.iso,media=cdrom,format=raw,readonly=on)
 if [[ $SCENARIO == usb ]]; then
   media=(-device qemu-xhci -drive file=out/image/omarchy-custom-diagnostic.iso,format=raw,if=none,id=usb,readonly=on -device usb-storage,drive=usb,bootindex=1)
@@ -45,13 +56,20 @@ if [[ $SCENARIO == install || $SCENARIO == interrupted ]]; then
   media+=(-drive file=work/vm/cidata.iso,media=cdrom,format=raw,readonly=on)
 fi
 accel=(-accel tcg -cpu max)
+if [[ $SCENARIO == wizard* ]]; then media+=(-drive file=work/vm/wizard.iso,media=cdrom,format=raw,readonly=on); fi
 if [[ -c /dev/kvm ]]; then sudo chmod a+rw /dev/kvm; accel=(-accel kvm -cpu host); fi
+live_shares=()
+if [[ $SCENARIO == wizard-finalized ]]; then
+  live_shares=(-virtfs "local,path=$PWD/work/installed-tools,mount_tag=omarchy-signing-tools,security_model=none,readonly=on")
+fi
 set +e
-timeout "$([[ $SCENARIO == install || $SCENARIO == interrupted ]] && echo 1800 || echo 180)" qemu-system-x86_64 -machine q35 "${accel[@]}" -m 8192 -smp 4 \
+timeout "$([[ $SCENARIO == install || $SCENARIO == interrupted || $SCENARIO == wizard* ]] && echo 1800 || echo 180)" qemu-system-x86_64 -machine q35 "${accel[@]}" -m 8192 -smp 4 \
   -drive if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.fd \
   -drive if=pflash,format=raw,file=work/vm/vars.fd \
   "${media[@]}" "${disks[@]}" -boot d -display none -serial "file:$report/serial.log" -monitor none -nic none -no-reboot \
   -virtfs "local,path=$PWD/tests/qemu,mount_tag=omarchy-ci,security_model=none,readonly=on" \
+  -virtfs "local,path=$PWD/installer,mount_tag=omarchy-installer,security_model=none,readonly=on" \
+  "${live_shares[@]}" \
   > "$report/qemu.log" 2>&1
 status=$?
 set -e
@@ -67,22 +85,64 @@ if grep -q OMARCHY_CI_FAILURE "$report/serial.log"; then exit 1; fi
 grep -q 'OMARCHY_CUSTOM_UEFI_BOOT_OK' "$report/serial.log"
 grep -q 'UPSTREAM_INSTALLER_AND_CIDATA_PRESENT' "$report/serial.log"
 grep -q 'CURRENT_CI_HARNESS_LOADED' "$report/serial.log"
-grep -q 'KERNEL_DEVICE_WRITE_BOUNDARY_OK' "$report/serial.log"
-if [[ $SCENARIO == interrupted ]]; then
-  grep -q INTERRUPTED_INSTALL_TARGET_ONLY "$report/serial.log"
-  grep -q WINDOWS_NVRAM_ENTRY_PRESERVED "$report/serial.log"
+if [[ $SCENARIO != wizard* ]]; then grep -q 'KERNEL_DEVICE_WRITE_BOUNDARY_OK' "$report/serial.log"; fi
+if [[ $SCENARIO == wizard-audit ]]; then
+  grep -q READ_ONLY_HARDWARE_VALIDATION_COMPLETE "$report/serial.log"
+  grep -q AUDIT_KERNEL_DENIED_ALL_DISK_WRITES "$report/serial.log"
+  printf 'Actual audit launcher and wizard passed; every synthetic disk byte unchanged.\n' > "$report/result.txt"
+elif [[ $SCENARIO == interrupted || $SCENARIO == wizard-interrupted ]]; then
+  if [[ $SCENARIO == wizard-interrupted ]]; then
+    grep -q GUARDED_WIZARD_INTERRUPTION_OK "$report/serial.log"
+    grep -q GUARDED_FIRMWARE_VARIABLES_UNCHANGED "$report/serial.log"
+  else
+    grep -q INTERRUPTED_INSTALL_TARGET_ONLY "$report/serial.log"
+    grep -q WINDOWS_NVRAM_ENTRY_PRESERVED "$report/serial.log"
+  fi
   printf 'Real package-writing installation killed; protected disks and Windows NVRAM unchanged.\n' > "$report/result.txt"
-elif [[ $SCENARIO == install ]]; then
-  grep -q 'GUARDED_UPSTREAM_INSTALL_OK' "$report/serial.log"
-  grep -q 'WINDOWS_NVRAM_ENTRY_PRESERVED' "$report/serial.log"
-  timeout 180 qemu-system-x86_64 -machine q35 "${accel[@]}" -m 8192 -smp 4 \
-    -drive if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.fd \
-    -drive if=pflash,format=raw,file=work/vm/vars.fd "${disks[@]}" \
-    -boot c -display none -serial "file:$report/installed-serial.log" -monitor none -nic none -no-reboot \
+elif [[ $SCENARIO == install || $SCENARIO == wizard* ]]; then
+  if [[ $SCENARIO == wizard* ]]; then
+    grep -q ACTUAL_GUARDED_WIZARD_ACCEPTANCE_OK "$report/serial.log"
+    grep -q GUARDED_FIRMWARE_VARIABLES_UNCHANGED "$report/serial.log"
+    grep -q ACTUAL_WRITER_DENIED_PROTECTED_OPENS "$report/serial.log"
+  else
+    grep -q 'GUARDED_UPSTREAM_INSTALL_OK' "$report/serial.log"
+    grep -q 'WINDOWS_NVRAM_ENTRY_PRESERVED' "$report/serial.log"
+  fi
+  installed_shares=()
+  if [[ $SCENARIO == wizard-signed || $SCENARIO == wizard-finalized ]]; then
+    installed_shares=(-virtfs "local,path=$PWD/work/installed-tools,mount_tag=omarchy-signing-tools,security_model=none,readonly=on")
+  fi
+  firmware=(-drive if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.fd)
+  machine=q35
+  signed_flags=()
+  if [[ $SCENARIO == wizard-finalized ]]; then
+    python3 - "$report" <<'PY'
+import base64,pathlib,re,sys
+data=(pathlib.Path(sys.argv[1])/'serial.log').read_bytes()
+match=re.findall(rb'OMARCHY_LOCAL_MOK_DER=([A-Za-z0-9+/=]+)',data)
+assert len(match)==1
+pathlib.Path('work/vm/owner.der').write_bytes(base64.b64decode(match[0],validate=True))
+PY
+    openssl x509 -inform DER -in work/vm/owner.der -out work/vm/owner.pem
+    work/secureboot-tools/bin/virt-fw-vars --input /usr/share/OVMF/OVMF_VARS_4M.ms.fd \
+      --output work/vm/vars.fd --add-mok dcf13531-f232-4bb9-8efc-c0c16bcf7f24 work/vm/owner.pem --secure-boot
+    firmware=(-drive if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.secboot.fd)
+    machine=q35,smm=on
+    signed_flags=(-global driver=cfi.pflash01,property=secure,value=on)
+  fi
+  python3 tests/qemu/boot-installed.py --scenario "$SCENARIO" --log "$report/installed-serial.log" -- \
+    qemu-system-x86_64 -machine "$machine" "${accel[@]}" "${signed_flags[@]}" -m 8192 -smp 4 \
+    "${firmware[@]}" \
+    -drive if=pflash,format=raw,file=work/vm/vars.fd "${disks[@]}" "${installed_shares[@]}" \
+    -boot c -display none -serial stdio -monitor none -nic none -no-reboot \
     > "$report/installed-qemu.log" 2>&1
   sha256sum -c "$report/protected-before.sha256" > "$report/protected-after-installed-boot.txt"
   grep -q OMARCHY_INSTALLED_UEFI_BOOT_OK "$report/installed-serial.log"
   if grep -q OMARCHY_INSTALLED_BOOT_FAILED "$report/installed-serial.log"; then exit 1; fi
+  if [[ $SCENARIO == wizard-signed ]]; then source tests/secureboot/installed.sh; fi
+  if [[ $SCENARIO == wizard-finalized ]]; then
+    grep -q GUARDED_WRITER_SIGNED_FINALIZATION_AND_FIRST_BOOT_PASSED "$report/installed-serial.log"
+  fi
   printf 'Upstream install and installed-system UEFI boot passed; protected bytes and Windows NVRAM entry unchanged.\n' > "$report/result.txt"
 else
   printf 'UEFI boot and kernel device-write boundary passed; protected bytes unchanged. No installation performed.\n' > "$report/result.txt"

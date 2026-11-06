@@ -1,0 +1,67 @@
+name: Actual signed-media enrollment and hardware audit
+on:
+  push:
+    branches: [codex/guarded-wizard]
+    paths: ['.github/workflows/audit-acceptance.yml']
+  workflow_dispatch:
+    inputs:
+      build_run_id:
+        description: Existing signed hardware image build run
+        required: true
+        type: string
+permissions:
+  contents: read
+  actions: read
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - run: bash scripts/install-tools.sh build
+        timeout-minutes: 5
+      - run: bash scripts/prepare-runner-space.sh
+      - run: |
+          python3 -m venv --system-site-packages work/secureboot-tools
+          work/secureboot-tools/bin/pip install --no-deps virt-firmware==26.10 pefile==2024.8.26
+      - name: Reuse the exact signed image
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BUILD_RUN: ${{ inputs.build_run_id || '42246446355' }}
+        run: |
+          # Debug retests can reuse an image whose build succeeded even if its
+          # previous host-side test failed. Publication still requires a green build.
+          gh run watch "$BUILD_RUN" --interval 15
+          python3 scripts/download-artifact.py --repository "$GITHUB_REPOSITORY" --run "$BUILD_RUN" --artifact hardware-validation-iso --destination out/hardware-validation
+      - run: python3 tests/secureboot/mok-ui.py
+      - run: env AUDIT_ENROLLED_VARS=work/enrollment/enroll-vars.fd python3 tests/secureboot/audit-media.py
+      - name: Retain positive reports before the negative boot
+        run: mv out/audit-media out/audit-positive; rm -rf -- work/vm
+      - run: env AUDIT_TAMPER_ROOT=1 AUDIT_ENROLLED_VARS=work/enrollment/enroll-vars.fd python3 tests/secureboot/audit-media.py
+      - name: Bind acceptance to immutable image and certificate
+        env:
+          BUILD_RUN: ${{ inputs.build_run_id || '42246446355' }}
+        run: |
+          python3 - <<'PY'
+          import hashlib,json,os,pathlib
+          root=pathlib.Path('out/hardware-validation'); m=json.loads((root/'build-metadata.json').read_text())
+          assert m['run_id']==os.environ['BUILD_RUN']
+          receipt=json.loads(pathlib.Path('out/audit-positive/hardware-receipt.json').read_text())
+          assert receipt['firmware']=={'SecureBoot':1,'SetupMode':0}
+          proof={'schema':1,'build_run_id':m['run_id'],'image_commit':m['commit'],
+              'iso_sha256':hashlib.file_digest(next(root.glob('*.iso')).open('rb'),'sha256').hexdigest(),
+              'certificate_sha256':m['certificate_sha256'],'mok_enrollment':True,'mok_cancellation':True,
+              'read_only_audit':True,'tampered_root_rejected':True,'all_disks_unchanged':True}
+          pathlib.Path('out/enrollment/acceptance.json').write_text(json.dumps(proof,indent=2)+'\n')
+          PY
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        if: always()
+        with:
+          name: enrollment-audit-reports
+          path: |
+            out/enrollment/
+            out/audit-media/
+            out/audit-positive/
+          retention-days: 14
