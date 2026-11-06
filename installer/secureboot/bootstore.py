@@ -34,7 +34,7 @@ def publish(esp, candidate, verify, initialize=False):
     esp, candidate = pathlib.Path(esp), pathlib.Path(candidate)
     if not esp.is_dir() or esp.is_symlink() or candidate.is_symlink():
         raise InvalidBootImage('Unexpected boot image or ESP path')
-    linux = esp/'EFI/Linux'
+    linux = esp/'EFI/Omarchy'
     stage = esp/'.omarchy-staging'
     for p in (esp/'EFI', linux, stage):
         if p.is_symlink():

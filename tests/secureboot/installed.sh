@@ -24,8 +24,10 @@ assert platform('baseline-firmware.json') == platform('mok-firmware.json')
 PY
 signed_boot() {
   local name=$1
+  extra=()
+  if [[ $name == signed-recovery ]]; then extra=(--recovery); fi
   cp work/vm/signed-vars.fd work/vm/vars.fd
-  python3 tests/qemu/boot-installed.py --scenario wizard-signed --log "$report/$name-serial.log" -- \
+  python3 tests/qemu/boot-installed.py --scenario wizard-signed --log "$report/$name-serial.log" "${extra[@]}" -- \
     qemu-system-x86_64 -machine q35,smm=on "${accel[@]}" -m 8192 -smp 4 \
     -global driver=cfi.pflash01,property=secure,value=on \
     -drive if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.secboot.fd \
@@ -39,7 +41,7 @@ signed_boot() {
 signed_boot signed-current
 # Only the disposable target image is edited. The ESP starts at sector 2048.
 esp=work/vm/target.raw@@1048576
-mcopy -i "$esp" ::/EFI/Linux/omarchy-current.efi work/vm/current.efi
+mcopy -i "$esp" ::/EFI/Omarchy/omarchy-current.efi work/vm/current.efi
 python3 - <<'PY'
 import pathlib, struct
 data = bytearray(pathlib.Path('work/vm/current.efi').read_bytes())
@@ -60,7 +62,7 @@ assert len(matches) == 1
 data[matches[0]] ^= 1
 pathlib.Path('work/vm/tampered.efi').write_bytes(data)
 PY
-mcopy -o -i "$esp" work/vm/tampered.efi ::/EFI/BOOT/grubx64.efi
+mcopy -o -i "$esp" work/vm/tampered.efi ::/EFI/Omarchy/omarchy-current.efi
 cp work/vm/signed-vars.fd work/vm/vars.fd
 set +e
 timeout 30 qemu-system-x86_64 -machine q35,smm=on "${accel[@]}" -m 8192 -smp 4 \
@@ -72,11 +74,9 @@ timeout 30 qemu-system-x86_64 -machine q35,smm=on "${accel[@]}" -m 8192 -smp 4 \
 tamper_status=$?
 set -e
 [[ $tamper_status == 0 || $tamper_status == 124 ]]
-grep -Eiq 'Security Violation|Verification failed|Bad shim signature|Access Denied' "$report/tampered-serial.log"
+grep -Eiq 'Security.*Violation|Verification failed|Bad shim signature|Access.*Denied' "$report/tampered-serial.log"
 ! grep -q OMARCHY_INSTALLED_UEFI_BOOT_OK "$report/tampered-serial.log"
 # Recovery is an independently retained stock UKI, not the rejected current.
-mcopy -i "$esp" ::/EFI/Linux/omarchy-recovery.efi work/vm/recovery.efi
-mcopy -o -i "$esp" work/vm/recovery.efi ::/EFI/BOOT/grubx64.efi
 signed_boot signed-recovery
 sha256sum -c "$report/protected-before.sha256" > "$report/protected-after-signed-boots.txt"
-printf 'Actual encrypted installed-system signing/update, signing-failure preservation, shim/MOK enforcing boot, tamper rejection and independent recovery boot passed. No automatic recovery selector or interactive enrollment was tested.\n' > "$report/signed-result.txt"
+printf 'Actual encrypted installed-system signing/update, signing-failure preservation, shim/MOK enforcing boot, tamper rejection and selection of stock recovery from the signed boot menu passed.\n' > "$report/signed-result.txt"

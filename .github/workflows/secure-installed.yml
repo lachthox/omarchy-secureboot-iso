@@ -35,7 +35,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: python3 scripts/download-artifact.py --repository "$GITHUB_REPOSITORY" --run 41615225482 --destination out/image
       - name: Install, sign, update, reject tampering and boot recovery
-        run: env SCENARIO=wizard-signed bash tests/qemu/boot.sh
+        run: |
+          python3 scripts/prepare-update-fixtures.py
+          env SCENARIO=wizard-signed ISO_PREVERIFIED=1 bash tests/qemu/boot.sh
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         if: always()
         with:

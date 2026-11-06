@@ -26,19 +26,28 @@ if enabled:
     raise SystemExit(0)
 
 keys = pathlib.Path('/var/lib/omarchy-custom/keys')
-subprocess.run(['bash', '/opt/omarchy-ci-tools/secureboot/prepare-local-keys.sh', '--generate-local-mok'], check=True)
+import shutil
+product = pathlib.Path('/usr/local/lib/omarchy-custom')
+product.mkdir(parents=True,exist_ok=True)
+shutil.copytree('/opt/omarchy-ci-tools/secureboot',product/'secureboot')
+shutil.copytree('/opt/omarchy-ci-tools',product/'tools',ignore=shutil.ignore_patterns('secureboot','installed-signed-check.py'))
 cmdline = pathlib.Path('/etc/kernel/cmdline')
 words = [word for word in cmdline.read_text().split() if word not in ('quiet', 'splash')]
 words += ['console=ttyS0,115200', 'disablehooks=plymouth', 'plymouth.enable=0']
 cmdline.write_text(' '.join(words)+'\n')
 version = subprocess.check_output(['uname', '-r'], text=True).strip()
 command = [sys.executable, '/opt/omarchy-ci-tools/secureboot/update.py', '--kernel-version', version]
-subprocess.run(command + ['--initialize-stock-recovery'], check=True)
-linux = pathlib.Path('/boot/EFI/Linux')
+subprocess.run([sys.executable,str(product/'secureboot/manage.py'),'initialize'],check=True)
+linux = pathlib.Path('/boot/EFI/Omarchy')
 current, recovery = linux/'omarchy-current.efi', linux/'omarchy-recovery.efi'
 original = bootstore.sha256(recovery)
 subprocess.run(command, check=True)
 assert bootstore.sha256(recovery) == original
+packages = list((product/'tools/packages').glob('linux-omarchy-*.pkg.tar.zst'))
+assert len(packages) == 1
+subprocess.run(['pacman','-U','--noconfirm',str(packages[0])],check=True)
+assert bootstore.sha256(recovery) == original
+print('REAL_PACMAN_KERNEL_TRANSACTION_SIGNED_HOOK_PASSED',flush=True)
 update.verify_uki(current)
 update.verify_uki(recovery)
 before = (bootstore.sha256(current), bootstore.sha256(recovery))
@@ -55,10 +64,6 @@ finally:
     saved.rename(key)
 assert before == (bootstore.sha256(current), bootstore.sha256(recovery))
 print('ACTUAL_SIGNED_UPDATE_AND_SIGNING_FAILURE_RECOVERY_PASSED', flush=True)
-boot = pathlib.Path('/boot/EFI/BOOT')
-import shutil
-shutil.copyfile('/opt/omarchy-ci-tools/shimx64.efi', boot/'BOOTX64.EFI')
-shutil.copyfile(current, boot/'grubx64.efi')
 print('OMARCHY_CI_MOK_DER='+base64.b64encode((keys/'MOK.der').read_bytes()).decode(), flush=True)
 print('SIGNED_INSTALLED_IMAGES='+json.dumps({'current': before[0], 'recovery': before[1]}), flush=True)
 subprocess.run(['sync'], check=True)

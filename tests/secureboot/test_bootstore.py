@@ -40,7 +40,7 @@ class Publication(unittest.TestCase):
         with self.assertRaises(bootstore.InvalidBootImage):
             bootstore.publish(self.esp, self.candidate, self.verify)
         for name, key in (('current','current_sha256'), ('recovery','recovery_sha256')):
-            self.assertEqual(bootstore.sha256(self.esp/f'EFI/Linux/omarchy-{name}.efi'), original[key])
+            self.assertEqual(bootstore.sha256(self.esp/f'EFI/Omarchy/omarchy-{name}.efi'), original[key])
 
     def test_interrupted_publication_preserves_active_image(self):
         original = self.initialize()
@@ -48,8 +48,8 @@ class Publication(unittest.TestCase):
         with patch.object(bootstore.os, 'replace', side_effect=OSError('simulated power loss')):
             with self.assertRaises(OSError):
                 bootstore.publish(self.esp, self.candidate, self.verify)
-        self.assertEqual(bootstore.sha256(self.esp/'EFI/Linux/omarchy-current.efi'), original['current_sha256'])
-        self.assertEqual(bootstore.sha256(self.esp/'EFI/Linux/omarchy-recovery.efi'), original['recovery_sha256'])
+        self.assertEqual(bootstore.sha256(self.esp/'EFI/Omarchy/omarchy-current.efi'), original['current_sha256'])
+        self.assertEqual(bootstore.sha256(self.esp/'EFI/Omarchy/omarchy-recovery.efi'), original['recovery_sha256'])
 
     def test_existing_images_cannot_be_reinitialized(self):
         self.initialize()
@@ -57,7 +57,7 @@ class Publication(unittest.TestCase):
 
     def test_missing_recovery_or_tampered_current_stops_update(self):
         self.initialize()
-        (self.esp/'EFI/Linux/omarchy-recovery.efi').unlink()
+        (self.esp/'EFI/Omarchy/omarchy-recovery.efi').unlink()
         with self.assertRaises(bootstore.InvalidBootImage):
             bootstore.publish(self.esp, self.candidate, self.verify)
 
@@ -68,8 +68,8 @@ class Publication(unittest.TestCase):
             real_replace(src, dst)
         with patch.object(bootstore.os, 'replace', side_effect=fail_current):
             with self.assertRaises(OSError): self.initialize()
-        self.verify(self.esp/'EFI/Linux/omarchy-recovery.efi')
-        self.assertFalse((self.esp/'EFI/Linux/omarchy-current.efi').exists())
+        self.verify(self.esp/'EFI/Omarchy/omarchy-recovery.efi')
+        self.assertFalse((self.esp/'EFI/Omarchy/omarchy-current.efi').exists())
 
 
 if __name__ == '__main__': unittest.main()
