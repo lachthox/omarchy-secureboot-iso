@@ -5,11 +5,20 @@ import pathlib
 import subprocess
 
 
+def installation_medium(disk, uuid):
+    """Match the boot ISO's filesystem identity, including writable DD USBs."""
+    return bool(uuid) and any(n.get('uuid') == uuid and n.get('fstype') == 'iso9660'
+                              and n.get('label') == 'OMARCHY_202610'
+                              for n in [disk]+disk.get('children', []))
+
+
 def inventory():
     if os.name != 'posix' or not pathlib.Path('/run/archiso').exists():
         raise RuntimeError('Discovery runs only in a booted ArchISO live environment')
     data = json.loads(subprocess.check_output(['lsblk', '--json', '--bytes', '--paths', '--output',
         'NAME,TYPE,MODEL,SERIAL,SIZE,FSTYPE,PARTTYPE,PARTUUID,UUID,MOUNTPOINTS,RM,MAJ:MIN,RO,LABEL']))
+    source_uuid = next((v.split('=',1)[1] for v in pathlib.Path('/proc/cmdline').read_text().split()
+                        if v.startswith('archisosearchuuid=')), '')
     aliases = {}
     for p in sorted(pathlib.Path('/dev/disk/by-id').glob('*')):
         if '-part' not in p.name and p.is_symlink():
@@ -17,6 +26,8 @@ def inventory():
     disks = []
     for d in data['blockdevices']:
         if d['type'] != 'disk':
+            continue
+        if installation_medium(d, source_uuid):
             continue
         if d.get('ro') and (d.get('label') == 'OMARCHY_202610' or any(
                 p.get('label') == 'OMARCHY_202610' for p in d.get('children', []))):

@@ -6,6 +6,7 @@ RAM copy of the actual mounted live root before switch_root can execute it.
 This deliberately requires copytoram, avoiding a check/use race on USB bytes.
 """
 import hashlib
+import argparse
 import json
 import os
 import pathlib
@@ -13,6 +14,9 @@ import re
 import subprocess
 
 assert os.environ.get('GITHUB_ACTIONS') == 'true' and os.environ.get('RUNNER_ENVIRONMENT') == 'github-hosted'
+parser = argparse.ArgumentParser()
+parser.add_argument('--mode',choices=('ci','audit'),default='ci')
+args = parser.parse_args()
 ROOT = pathlib.Path('work/secure-live'); ROOT.mkdir(parents=True, exist_ok=True)
 REPORT = pathlib.Path('out/secure-live'); REPORT.mkdir(parents=True, exist_ok=True)
 ISO = 'out/image/omarchy-custom-diagnostic.iso'
@@ -116,12 +120,17 @@ echo 'OMARCHY_AUTHENTICATED_LIVE_ROOT_OK' >/dev/console
 overlay = cpio([('hooks/archiso', 0o100755, archiso.encode()), ('omarchy-auth-root', 0o100755, auth.encode())])
 (ROOT/'authenticated-initrd').write_bytes(data+b'\0'*(-len(data)%4)+overlay)
 words = [w for w in linux[2].split() if w not in ('quiet', 'splash') and not w.startswith(('copytoram=', 'console='))]
-words += ['copytoram=y', 'console=ttyS0,115200', 'omarchy_ci=1',
-          'systemd.mask=getty@tty1.service', 'systemd.mask=serial-getty@ttyS0.service',
-          'module.sig_enforce=1', 'lockdown=integrity']
+words += ['copytoram=y','module.sig_enforce=1','lockdown=integrity',
+          'systemd.gpt_auto=0','rd.systemd.gpt_auto=0']
+if args.mode == 'ci':
+    words += ['console=ttyS0,115200','omarchy_ci=1','systemd.mask=getty@tty1.service',
+              'systemd.mask=serial-getty@ttyS0.service']
+else:
+    words += ['console=tty0','console=ttyS0,115200','omarchy_audit=1',
+              'systemd.mask=serial-getty@ttyS0.service','systemd.journald.forward_to_console=yes']
 (ROOT/'cmdline').write_text(' '.join(words)+'\n')
 (ROOT/'os-release').write_text('ID=omarchy\nNAME="Omarchy Secure Boot cloud acceptance"\n')
 (REPORT/'payloads.json').write_text(json.dumps({'kernel_source': linux[1], 'initramfs_source': initrd[1],
     'squashfs_sha256': expected, 'squashfs_sha512': expected512,
     'external_root_policy': 'Authenticate immutable RAM copy before mounting SquashFS',
-    'production_boot_chain_validated': False}, indent=2)+'\n')
+    'mode':args.mode,'production_boot_chain_validated': False}, indent=2)+'\n')
