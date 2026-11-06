@@ -82,8 +82,11 @@ tamper = os.environ.get('AUDIT_TAMPER_ROOT') == '1'
 if tamper:
     extent = subprocess.check_output(['xorriso','-indev',str(usb),'-find',
         '/arch/x86_64/airootfs.sfs','-exec','report_lba','--'],text=True,stderr=subprocess.STDOUT)
+    (REPORT/'squashfs-extents.txt').write_text(extent)
     matches = re.findall(r'File data lba:\s*\d+\s*,\s*(\d+)\s*,\s*(\d+)\s*,',extent)
-    assert len(matches) == 1, 'Expected one contiguous SquashFS file extent'
+    # ISO9660 level 3 splits files larger than 4 GiB into multiple extents.
+    # Mutate within the first data extent; the signed full-file digest must fail.
+    assert matches, 'SquashFS data extents were not reported'
     sector,blocks = map(int,matches[0]); assert blocks*2048 > 1048576
     with usb.open('r+b') as stream:
         stream.seek(sector*2048+1048576); original=stream.read(1)

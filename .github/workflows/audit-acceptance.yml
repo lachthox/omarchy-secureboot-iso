@@ -29,7 +29,7 @@ jobs:
       - name: Reuse the exact signed image
         env:
           GH_TOKEN: ${{ github.token }}
-          BUILD_RUN: ${{ inputs.build_run_id || '42243201529' }}
+          BUILD_RUN: ${{ inputs.build_run_id || '42246446355' }}
         run: |
           # Debug retests can reuse an image whose build succeeded even if its
           # previous host-side test failed. Publication still requires a green build.
@@ -42,7 +42,7 @@ jobs:
       - run: env AUDIT_TAMPER_ROOT=1 AUDIT_ENROLLED_VARS=work/enrollment/enroll-vars.fd python3 tests/secureboot/audit-media.py
       - name: Bind acceptance to immutable image and certificate
         env:
-          BUILD_RUN: ${{ inputs.build_run_id || '42243201529' }}
+          BUILD_RUN: ${{ inputs.build_run_id || '42246446355' }}
         run: |
           python3 - <<'PY'
           import hashlib,json,os,pathlib
