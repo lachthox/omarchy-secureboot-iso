@@ -109,15 +109,30 @@ def restore_modules():
         run(['depmod',version])
 
 
-def signed_menu():
+def refresh_manager():
     candidate = BASE/'systemd-boot.signed.efi'
+    source = pathlib.Path('/usr/lib/systemd/boot/efi/systemd-bootx64.efi')
+    if not source.is_file(): source = TOOLS/'systemd-bootx64.efi'
     run(['sbsign','--key',str(KEYS/'MOK.key'),'--cert',str(KEYS/'MOK.pem'),
-         '--output',str(candidate),str(TOOLS/'systemd-bootx64.efi')])
+         '--output',str(candidate),str(source)])
     run(['sbverify','--cert',str(KEYS/'MOK.pem'),str(candidate)])
     boot = pathlib.Path('/boot/EFI/BOOT'); boot.mkdir(parents=True,exist_ok=True)
+    manager = boot/'grubx64.efi'
+    if manager.exists():
+        run(['sbverify','--cert',str(KEYS/'MOK.pem'),str(manager)])
+        shutil.copyfile(manager,boot/'grubx64.previous.efi')
+    staged = boot/'grubx64.efi.new'
+    shutil.copyfile(candidate,staged)
+    with staged.open('rb') as file: os.fsync(file.fileno())
+    os.replace(staged,manager)
+
+
+def signed_menu():
+    refresh_manager()
+    boot = pathlib.Path('/boot/EFI/BOOT')
     # First retain the signed manager and public enrollment material, then
     # select shim. These operations never register or reorder firmware entries.
-    for source, name in ((candidate,'grubx64.efi'), (TOOLS/'mmx64.efi','mmx64.efi'),
+    for source, name in ((TOOLS/'mmx64.efi','mmx64.efi'),
                          (KEYS/'MOK.der','omarchy-owner.cer'), (TOOLS/'shimx64.efi','BOOTX64.EFI')):
         staged = boot/(name+'.new')
         shutil.copyfile(source,staged)
@@ -128,7 +143,7 @@ def signed_menu():
     (loader/'loader.conf').write_text('default omarchy-current.conf\ntimeout 5\neditor no\nauto-entries no\nauto-firmware no\nconsole-mode keep\n')
     for name, title in (('current','Omarchy'),('recovery','Omarchy stock recovery')):
         (loader/'entries'/f'omarchy-{name}.conf').write_text(
-            f'title {title}\nefi /EFI/Omarchy/omarchy-{name}.efi\n')
+            f'title {title}\nsort-key omarchy-{1 if name == "current" else 2}\nefi /EFI/Omarchy/omarchy-{name}.efi\n')
     # Upstream's unsigned UKIs are retained outside automatic discovery.
     upstream = pathlib.Path('/boot/.omarchy-upstream'); upstream.mkdir(exist_ok=True)
     for p in pathlib.Path('/boot/EFI/Linux').glob('*.efi'):
@@ -147,10 +162,12 @@ Operation = Upgrade
 Operation = Remove
 Type = Path
 Target = usr/lib/modules/*
+Target = usr/src/*/dkms.conf
 Target = usr/lib/firmware/*
 Target = usr/lib/initcpio/*
 Target = usr/lib/systemd/boot/efi/*
 Target = etc/mkinitcpio.conf*
+Target = etc/modprobe.d/*
 '''
     (hooks/'00-omarchy-secureboot-preflight.hook').write_text(triggers+f'''
 [Action]
@@ -170,8 +187,14 @@ Exec = {command} update
         p = hooks/name
         if p.exists() or p.is_symlink(): p.unlink()
         p.symlink_to('/dev/null')
+    for hook in pathlib.Path('/usr/share/libalpm/hooks').glob('*.hook'):
+        if re.search(r'^Exec\s*=.*\bbootctl\s+(update|install)\b',hook.read_text(),re.M):
+            override = hooks/hook.name
+            if override.exists() or override.is_symlink(): override.unlink()
+            override.symlink_to('/dev/null')
     defaults = pathlib.Path('/etc/default/limine')
-    defaults.write_text(defaults.read_text()+'\nENABLE_LIMINE_FALLBACK=no\n')
+    text = re.sub(r'^ENABLE_LIMINE_FALLBACK=.*\n?','',defaults.read_text(),flags=re.M)
+    defaults.write_text(text.rstrip()+'\nENABLE_LIMINE_FALLBACK=no\n')
     units = pathlib.Path('/etc/systemd/system'); units.mkdir(exist_ok=True)
     service = units/'systemd-boot-update.service'
     if service.exists() or service.is_symlink(): service.unlink()
@@ -206,7 +229,7 @@ def main():
     command = [sys.executable,str(HERE/'update.py'),'--kernel-version',version]
     if args.operation == 'initialize': command += ['--initialize-stock-recovery']
     run(command)
-    signed_menu() if args.operation == 'initialize' else None
+    signed_menu() if args.operation == 'initialize' else refresh_manager()
     install_hooks()
     print('OMARCHY_SIGNED_PACKAGE_POLICY_READY',flush=True)
 

@@ -16,6 +16,7 @@ umask 077
 install -d -m700 "$dest"
 openssl req -new -x509 -newkey rsa:3072 -nodes -days 3650 \
   -subj '/CN=Omarchy machine-local owner key/' \
+  -addext 'extendedKeyUsage=codeSigning' \
   -keyout "$dest/MOK.key" -outform DER -out "$dest/MOK.der"
 openssl x509 -inform DER -in "$dest/MOK.der" -out "$dest/MOK.pem"
 chmod 600 "$dest"/*
