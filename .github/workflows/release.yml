@@ -90,11 +90,15 @@ jobs:
           else
             flags=()
             if [[ "$RELEASE_KIND" != production ]]; then flags+=(--prerelease); fi
-            gh release create "$RELEASE_TAG" --draft --verify-tag "${flags[@]}" --title "$RELEASE_TAG" --notes 'Verified image packaging in progress.'
+            title="$RELEASE_TAG"
+            if [[ "$RELEASE_KIND" == hardware-validation ]]; then title+=" (read-only hardware validation)"; fi
+            gh release create "$RELEASE_TAG" --draft --verify-tag "${flags[@]}" --title "$title" --notes 'Verified image packaging in progress.'
           fi
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
+      - name: Prepare hosted packaging space
+        run: bash scripts/prepare-runner-space.sh
       - name: Download tested image once
         env:
           GH_TOKEN: ${{ github.token }}

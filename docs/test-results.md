@@ -18,6 +18,9 @@ used synthetic regular-file-backed QEMU drives, never host block devices.
 | [Corrected guarded wizard acceptance](https://github.com/lachthox/omarchy-secureboot-iso/actions/runs/41645933032) | Read-only audit, actual unencrypted/encrypted installation and installed boot, and forced writer interruption passed |
 | [Actual signed installed-system acceptance](https://github.com/lachthox/omarchy-secureboot-iso/actions/runs/41653839295) | Real encrypted installed-system key generation/signing/update, signing-failure preservation, Microsoft shim/MOK enforcing boot, intact-PE initramfs tamper rejection and independent recovery boot passed |
 | [Current diagnostic image](https://github.com/lachthox/omarchy-secureboot-iso/actions/runs/41655316192) | Rebuilt image verified, runner-local VM smoke tests passed, and diagnostic-iso artifact uploaded with the read-only hardware-validation menu entry; not signed physical-installation media |
+| [Signed read-only hardware image](https://github.com/lachthox/omarchy-secureboot-iso/actions/runs/42246446355) | Official ISO authenticated, rebuilt and signed with an ephemeral live key; actual writable USB clone booted with SecureBoot=1/SetupMode=0; keyboard-operated audit completed and all three simulated SSDs stayed unchanged |
+| [Real owner enrollment, audit and modified-root rejection](https://github.com/lachthox/omarchy-secureboot-iso/actions/runs/42247038530) | Actual MokManager disk enrollment and cancellation passed with displayed fingerprint comparison; PK/KEK/db/dbx unchanged; enrolled firmware booted that exact image into the audit; a modified external SquashFS was rejected before mount; all simulated disks unchanged |
+| [Guarded writer signs before first reboot](https://github.com/lachthox/omarchy-secureboot-iso/actions/runs/42247258591) | Actual wizard installed encrypted target, generated the owner key inside its restricted writer, initialized signed current/recovery and package hooks, then booted the installed disk with SecureBoot=1/SetupMode=0 and module integrity enforced |
 
 The low-level sandbox tests actually attempted writable opens on both protected
 disks and their partitions, including aliases for the same device numbers. Those
@@ -59,9 +62,18 @@ test-source share and do not rebuild the ISO.
 
 ## Remaining production gates
 
-The public prerelease is **diagnostic only**. It is not an installation product
-for the target desktop and will not boot under an unmodified stock Secure Boot
-policy. Do not weaken Windows security to use this prototype.
+The old v0.1 diagnostic prerelease is unsigned. The new hardware milestone is
+signed **read-only validation**, with physical installation disabled. Its owner
+MOK enrollment preserves platform trust databases. Actual motherboard revocation
+policy and the user's Crucial/Samsung/WD identities remain hardware checks.
+
+The accepted hardware image SHA256 is
+`fb35b4349bcaccab200e80ed0aa316186c0f14378d4915289b652b2830f5c594`.
+Its public certificate SHA256 is
+`532fc18535433629298ee295ed0b566f70bbb03ddedfc88d344c17b5a3c4685d`.
+The release gate checks both against the immutable build artifact and acceptance
+receipt. Only public certificate material is published; the live private key
+was discarded after signing.
 
 The real guarded wizard has installed and booted unencrypted and encrypted
 synthetic targets; its interrupted-writer test also passed.

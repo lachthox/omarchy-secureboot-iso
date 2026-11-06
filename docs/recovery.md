@@ -6,6 +6,8 @@ The menu editor is disabled. Recovery retains the initial signed stock UKI and
 its kernel modules; GPU unlock remains disabled. Actual VM acceptance modifies
 the current image, confirms rejection, selects recovery from this menu and
 boots the encrypted root with Secure Boot and module enforcement active.
+Recovery boots its retained kernel against the current encrypted root; package
+rollback is a separate repair step.
 
 Signing hooks run during normal pacman kernel/module/systemd changes. Before
 updates they verify the machine-local key and both boot images. After updates
