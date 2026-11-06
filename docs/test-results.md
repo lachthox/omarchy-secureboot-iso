@@ -20,7 +20,7 @@ used synthetic regular-file-backed QEMU drives, never host block devices.
 | [Current diagnostic image](https://github.com/lachthox/omarchy-secureboot-iso/actions/runs/41655316192) | Rebuilt image verified, runner-local VM smoke tests passed, and diagnostic-iso artifact uploaded with the read-only hardware-validation menu entry; not signed physical-installation media |
 | [Signed read-only hardware image](https://github.com/lachthox/omarchy-secureboot-iso/actions/runs/42246446355) | Official ISO authenticated, rebuilt and signed with an ephemeral live key; actual writable USB clone booted with SecureBoot=1/SetupMode=0; keyboard-operated audit completed and all three simulated SSDs stayed unchanged |
 | [Real owner enrollment, audit and modified-root rejection](https://github.com/lachthox/omarchy-secureboot-iso/actions/runs/42247038530) | Actual MokManager disk enrollment and cancellation passed with displayed fingerprint comparison; PK/KEK/db/dbx unchanged; enrolled firmware booted that exact image into the audit; a modified external SquashFS was rejected before mount; all simulated disks unchanged |
-| [Guarded writer signs before first reboot](https://github.com/lachthox/omarchy-secureboot-iso/actions/runs/42247258591) | Actual wizard installed encrypted target, generated the owner key inside its restricted writer, initialized signed current/recovery and package hooks, then booted the installed disk with SecureBoot=1/SetupMode=0 and module integrity enforced |
+| [Final guarded signing and first secure boot](https://github.com/lachthox/omarchy-secureboot-iso/actions/runs/42248036346) | Actual wizard installed encrypted target with OMARCHY_OS ESP, generated the owner key inside its restricted writer, published both public fingerprints/enrollment receipt, initialized signed current/recovery and hooks, then booted with SecureBoot=1/SetupMode=0 and module integrity enforced; package/DKMS/tamper/recovery suite also passed |
 
 The low-level sandbox tests actually attempted writable opens on both protected
 disks and their partitions, including aliases for the same device numbers. Those
@@ -77,6 +77,9 @@ was discarded after signing.
 
 The real guarded wizard has installed and booted unencrypted and encrypted
 synthetic targets; its interrupted-writer test also passed.
+The [final guarded-wizard run](https://github.com/lachthox/omarchy-secureboot-iso/actions/runs/42248036338)
+repeated read-only audit, both installations/boots and writer interruption after
+the named target ESP and enrollment receipt changes.
 The passphrase driver now waits for the complete cryptsetup prompt and allows
 terminal setup to finish before sending input: cryptsetup prints the prompt
 before disabling echo with TCSAFLUSH, which can discard an immediate response.
