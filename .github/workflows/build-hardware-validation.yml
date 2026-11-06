@@ -20,6 +20,7 @@ jobs:
         with:
           persist-credentials: false
       - run: bash scripts/install-tools.sh build
+        timeout-minutes: 5
       - run: bash scripts/prepare-runner-space.sh
       - run: |
           sudo apt-get install -y --no-install-recommends systemd-boot-efi=255.4-1ubuntu8.18 systemd-ukify=255.4-1ubuntu8.18
