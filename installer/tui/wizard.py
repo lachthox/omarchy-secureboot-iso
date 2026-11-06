@@ -16,6 +16,31 @@ from policy import Refused, plan, reasons, revalidate
 from runner import install
 
 
+def require_enforcing_boot(sysroot=pathlib.Path('/sys')):
+    """Refuse installation when firmware, shim or kernel enforcement is off."""
+    variables = sysroot/'firmware/efi/efivars'
+    def value(name, optional=False):
+        paths = list(variables.glob(name+'-*'))
+        if optional and not paths:
+            return 0
+        if len(paths) != 1:
+            raise Refused('Secure Boot state is unavailable or ambiguous')
+        data = paths[0].read_bytes()
+        if len(data) != 5:
+            raise Refused('Secure Boot state has an unexpected format')
+        return data[4]
+    try:
+        if value('SecureBoot') != 1 or value('SetupMode') != 0 or value('MokSBStateRT',True) != 0:
+            raise Refused('Firmware and shim must enforce Secure Boot before installation')
+        if (sysroot/'module/module/parameters/sig_enforce').read_text().strip() not in ('Y','1'):
+            raise Refused('Kernel module signature enforcement is required')
+        lockdown = (sysroot/'kernel/security/lockdown').read_text()
+        if '[integrity]' not in lockdown and '[confidentiality]' not in lockdown:
+            raise Refused('Kernel lockdown is required')
+    except OSError as exc:
+        raise Refused('Unable to verify active Secure Boot enforcement') from exc
+
+
 def main(read=input, secret=getpass.getpass, discover=inventory, acceptance=None, audit=False):
     print('Omarchy guarded setup | Ctrl+C cancels\n', flush=True)
     disks = discover()
@@ -57,7 +82,7 @@ def main(read=input, secret=getpass.getpass, discover=inventory, acceptance=None
             report = {'schema':1,'mode':'read-only','kernel_disk_write_denials':True,
                       'firmware':firmware,'plan':proposed}
             pathlib.Path('/run/omarchy-hardware-validation.json').write_text(json.dumps(report,indent=2)+'\n')
-            subprocess.run(['logger','-t','omarchy-hardware-validation',
+            subprocess.run(['logger','--size','8192','-t','omarchy-hardware-validation',
                             'OMARCHY_HARDWARE_REPORT='+json.dumps(report,separators=(',',':'))],check=True)
         print('READ_ONLY_HARDWARE_VALIDATION_COMPLETE: no installation was started.', flush=True)
         return
@@ -72,6 +97,7 @@ def main(read=input, secret=getpass.getpass, discover=inventory, acceptance=None
             print('HARDWARE_VALIDATION_ONLY: '+capabilities['reason'])
             print('Disk identities and the proposed plan were checked. No partitions were changed.')
             return
+        require_enforcing_boot()
     else:
         acceptance()
     username = read('New username: ').strip()

@@ -23,7 +23,7 @@ if args.recovery:
     command += ['-qmp','unix:'+str(qmp_path)+',server=on,wait=off']
 process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
 selector = selectors.DefaultSelector(); selector.register(process.stdout, selectors.EVENT_READ)
-deadline = time.monotonic()+(180 if args.recovery else 900 if args.scenario == 'wizard-signed' else 240)
+deadline = time.monotonic()+(180 if args.recovery else 900 if args.scenario in ('wizard-signed','wizard-finalized') else 240)
 sent = False; recent = b''; recovery_selected = False
 
 def select_recovery():
@@ -55,7 +55,7 @@ try:
                 recent = (recent+chunk)[-16384:]
                 if args.recovery and not recovery_selected and b'Omarchy stock recovery' in recent:
                     select_recovery(); recovery_selected = True
-                if (args.scenario in ('wizard-encrypted', 'wizard-signed') and not sent
+                if (args.scenario in ('wizard-encrypted', 'wizard-signed','wizard-finalized') and not sent
                         and re.search(rb'Enter passphrase for /dev/[A-Za-z0-9/_-]+: $', recent)):
                     # cryptsetup prints its prompt before TCSAFLUSH disables echo
                     # and discards queued input. Model a human's response delay.
@@ -66,7 +66,7 @@ try:
                 break
     if process.returncode:
         raise RuntimeError('QEMU installed boot exited with '+str(process.returncode))
-    if args.scenario in ('wizard-encrypted', 'wizard-signed') and not sent:
+    if args.scenario in ('wizard-encrypted', 'wizard-signed','wizard-finalized') and not sent:
         raise RuntimeError('Encrypted boot never requested the test passphrase')
     if args.recovery and not recovery_selected:
         raise RuntimeError('The signed recovery menu was never selected')

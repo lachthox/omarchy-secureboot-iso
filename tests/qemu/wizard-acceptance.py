@@ -23,8 +23,15 @@ def acceptance():
     assert {d['serial'] for d in disks} == {'WINDOWS_A', 'WINDOWS_B', 'OMARCHYTESTC'}
     target = next(d for d in disks if d['serial'] == 'OMARCHYTESTC')
     assert target['size'] == (256*1024**2 if pathlib.Path('/dev/disk/by-label/wizard-audit').exists() else 48*1024**3)
-    signed = pathlib.Path('/dev/disk/by-label/wizard-signed').exists()
+    finalized = pathlib.Path('/dev/disk/by-label/wizard-finalized').exists()
+    signed = finalized or pathlib.Path('/dev/disk/by-label/wizard-signed').exists()
+    tools = pathlib.Path('/run/omarchy-signing-tools')
+    if finalized and not tools.is_dir():
+        tools.mkdir()
+        subprocess.run(['mount','-t','9p','-o','trans=virtio,version=9p2000.L,ro,nodev,nosuid',
+                        'omarchy-signing-tools',str(tools)],check=True)
     return {'encrypted': signed or pathlib.Path('/dev/disk/by-label/wizard-encrypted').exists(),
+            'secure_boot':finalized,'secure_boot_tools':str(tools) if finalized else None,
             'ci_interrupt': pathlib.Path('/dev/disk/by-label/wizard-interrupted').exists(),
             'ci_probe': str(pathlib.Path(__file__).with_name('installed-signed-boot.sh' if signed else 'installed-boot.sh'))}
 

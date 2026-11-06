@@ -57,7 +57,7 @@ def parent():
     probe=pathlib.Path(__file__).with_name('security-probe.py')
     if probe.exists():
         subprocess.run([sys.executable,str(probe)],check=True)
-    if any(pathlib.Path('/dev/disk/by-label/'+label).exists() for label in ('wizard','wizard-encrypted','wizard-signed','wizard-interrupted','wizard-audit')):
+    if any(pathlib.Path('/dev/disk/by-label/'+label).exists() for label in ('wizard','wizard-encrypted','wizard-signed','wizard-interrupted','wizard-audit','wizard-finalized')):
         subprocess.run([sys.executable,str(pathlib.Path(__file__).with_name('wizard-acceptance.py'))],check=True)
         return
     disks=devices()

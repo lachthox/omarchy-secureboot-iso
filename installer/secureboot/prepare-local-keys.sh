@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 # Installed-system opt-in. Does not modify firmware variables or enroll keys.
 set -euo pipefail
-[[ $EUID == 0 && ! -d /run/archiso ]]
+[[ $EUID == 0 ]]
+if [[ -d /run/archiso ]]; then
+  grep -Eq '/omarchy-guarded-[[:digit:]]+\.service($|/)' /proc/self/cgroup || exit 1
+fi
 [[ $# == 1 && $1 == --generate-local-mok ]] || {
   echo 'Usage: sudo bash prepare-local-keys.sh --generate-local-mok'; exit 2;
 }

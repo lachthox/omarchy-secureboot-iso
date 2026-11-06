@@ -34,7 +34,9 @@ def main():
     parser.add_argument('--kernel-version', required=True)
     parser.add_argument('--initialize-stock-recovery', action='store_true')
     args = parser.parse_args()
-    if os.geteuid() != 0 or pathlib.Path('/run/archiso').exists():
+    guarded = bool(re.search(r'/omarchy-guarded-\d+\.service(?:$|/)',
+                            pathlib.Path('/proc/self/cgroup').read_text(),re.M))
+    if os.geteuid() != 0 or (pathlib.Path('/run/archiso').exists() and not guarded):
         raise InvalidBootImage('Update signing runs only on an installed system as root')
     source = subprocess.check_output(['findmnt', '-n', '-o', 'SOURCE', '/'], text=True).strip().split('[')[0]
     types = subprocess.check_output(['lsblk', '-sno', 'TYPE', source], text=True).split()

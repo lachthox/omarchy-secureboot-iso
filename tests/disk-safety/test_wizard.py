@@ -3,6 +3,7 @@ import importlib.util
 import io
 import pathlib
 import sys
+import tempfile
 import unittest
 from unittest.mock import patch
 
@@ -46,6 +47,26 @@ class WizardSafety(unittest.TestCase):
         self.assertEqual(len(config['disk_config']['device_modifications']),1)
         self.assertEqual(config['disk_config']['device_modifications'][0]['device'],'/dev/sdb')
         self.assertFalse(config['omarchy_install']['defer_provisioning'])
+
+    def test_install_requires_firmware_shim_and_kernel_enforcement(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=pathlib.Path(directory)
+            variables=root/'firmware/efi/efivars'; variables.mkdir(parents=True)
+            for name,value in [('SecureBoot',1),('SetupMode',0)]:
+                (variables/(name+'-test')).write_bytes(bytes([7,0,0,0,value]))
+            module=root/'module/module/parameters/sig_enforce'; module.parent.mkdir(parents=True)
+            module.write_text('Y\n')
+            lockdown=root/'kernel/security/lockdown'; lockdown.parent.mkdir(parents=True)
+            lockdown.write_text('none [integrity] confidentiality\n')
+            wizard.require_enforcing_boot(root)
+            for path,bad in [(variables/'SecureBoot-test',bytes([7,0,0,0,0])),
+                             (variables/'SetupMode-test',bytes([7,0,0,0,1])),
+                             (module,b'N\n'),(lockdown,b'[none] integrity confidentiality\n')]:
+                saved=path.read_bytes(); path.write_bytes(bad)
+                with self.assertRaises(Refused): wizard.require_enforcing_boot(root)
+                path.write_bytes(saved)
+            (variables/'MokSBStateRT-test').write_bytes(bytes([7,0,0,0,1]))
+            with self.assertRaises(Refused): wizard.require_enforcing_boot(root)
 
     def test_encrypted_config_requires_verified_storage(self):
         with self.assertRaises(ValueError): configuration(fixture()[2],encrypted=True)

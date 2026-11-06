@@ -22,9 +22,13 @@ if enabled:
     assert setup[0].read_bytes()[4] == 0
     assert pathlib.Path('/sys/module/module/parameters/sig_enforce').read_text().strip() in ('Y', '1')
     assert '[integrity]' in pathlib.Path('/sys/kernel/security/lockdown').read_text()
-    subprocess.run(['modprobe','omarchy_ci_trust'],check=True)
-    assert pathlib.Path('/sys/module/omarchy_ci_trust').is_dir()
-    print('REAL_DKMS_OWNER_SIGNED_MODULE_LOADED_UNDER_ENFORCEMENT',flush=True)
+    if pathlib.Path('/etc/omarchy-custom/acceptance-finalized').exists():
+        subprocess.run([sys.executable,'/usr/local/lib/omarchy-custom/secureboot/manage.py','preflight'],check=True)
+        print('GUARDED_WRITER_SIGNED_FINALIZATION_AND_FIRST_BOOT_PASSED',flush=True)
+    else:
+        subprocess.run(['modprobe','omarchy_ci_trust'],check=True)
+        assert pathlib.Path('/sys/module/omarchy_ci_trust').is_dir()
+        print('REAL_DKMS_OWNER_SIGNED_MODULE_LOADED_UNDER_ENFORCEMENT',flush=True)
     print('INSTALLED_SECUREBOOT_1_SETUPMODE_0_INTEGRITY_ENFORCED', flush=True)
     raise SystemExit(0)
 

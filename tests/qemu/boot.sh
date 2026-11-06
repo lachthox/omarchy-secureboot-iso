@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 source scripts/common.sh
 cloud_only
-[[ $SCENARIO =~ ^(cdrom|usb|reordered|invalid|install|interrupted|wizard|wizard-encrypted|wizard-signed|wizard-interrupted|wizard-audit)$ ]]
+[[ $SCENARIO =~ ^(cdrom|usb|reordered|invalid|install|interrupted|wizard|wizard-encrypted|wizard-signed|wizard-interrupted|wizard-audit|wizard-finalized)$ ]]
 report=out/qemu/$SCENARIO
 mkdir -p work/vm out/qemu
 mkdir -p "$report"
@@ -58,6 +58,10 @@ fi
 accel=(-accel tcg -cpu max)
 if [[ $SCENARIO == wizard* ]]; then media+=(-drive file=work/vm/wizard.iso,media=cdrom,format=raw,readonly=on); fi
 if [[ -c /dev/kvm ]]; then sudo chmod a+rw /dev/kvm; accel=(-accel kvm -cpu host); fi
+live_shares=()
+if [[ $SCENARIO == wizard-finalized ]]; then
+  live_shares=(-virtfs "local,path=$PWD/work/installed-tools,mount_tag=omarchy-signing-tools,security_model=none,readonly=on")
+fi
 set +e
 timeout "$([[ $SCENARIO == install || $SCENARIO == interrupted || $SCENARIO == wizard* ]] && echo 1800 || echo 180)" qemu-system-x86_64 -machine q35 "${accel[@]}" -m 8192 -smp 4 \
   -drive if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.fd \
@@ -65,6 +69,7 @@ timeout "$([[ $SCENARIO == install || $SCENARIO == interrupted || $SCENARIO == w
   "${media[@]}" "${disks[@]}" -boot d -display none -serial "file:$report/serial.log" -monitor none -nic none -no-reboot \
   -virtfs "local,path=$PWD/tests/qemu,mount_tag=omarchy-ci,security_model=none,readonly=on" \
   -virtfs "local,path=$PWD/installer,mount_tag=omarchy-installer,security_model=none,readonly=on" \
+  "${live_shares[@]}" \
   > "$report/qemu.log" 2>&1
 status=$?
 set -e
@@ -104,12 +109,30 @@ elif [[ $SCENARIO == install || $SCENARIO == wizard* ]]; then
     grep -q 'WINDOWS_NVRAM_ENTRY_PRESERVED' "$report/serial.log"
   fi
   installed_shares=()
-  if [[ $SCENARIO == wizard-signed ]]; then
+  if [[ $SCENARIO == wizard-signed || $SCENARIO == wizard-finalized ]]; then
     installed_shares=(-virtfs "local,path=$PWD/work/installed-tools,mount_tag=omarchy-signing-tools,security_model=none,readonly=on")
   fi
+  firmware=(-drive if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.fd)
+  machine=q35
+  signed_flags=()
+  if [[ $SCENARIO == wizard-finalized ]]; then
+    python3 - "$report" <<'PY'
+import base64,pathlib,re,sys
+data=(pathlib.Path(sys.argv[1])/'serial.log').read_bytes()
+match=re.findall(rb'OMARCHY_LOCAL_MOK_DER=([A-Za-z0-9+/=]+)',data)
+assert len(match)==1
+pathlib.Path('work/vm/owner.der').write_bytes(base64.b64decode(match[0],validate=True))
+PY
+    openssl x509 -inform DER -in work/vm/owner.der -out work/vm/owner.pem
+    work/secureboot-tools/bin/virt-fw-vars --input /usr/share/OVMF/OVMF_VARS_4M.ms.fd \
+      --output work/vm/vars.fd --add-mok dcf13531-f232-4bb9-8efc-c0c16bcf7f24 work/vm/owner.pem --secure-boot
+    firmware=(-drive if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.secboot.fd)
+    machine=q35,smm=on
+    signed_flags=(-global driver=cfi.pflash01,property=secure,value=on)
+  fi
   python3 tests/qemu/boot-installed.py --scenario "$SCENARIO" --log "$report/installed-serial.log" -- \
-    qemu-system-x86_64 -machine q35 "${accel[@]}" -m 8192 -smp 4 \
-    -drive if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.fd \
+    qemu-system-x86_64 -machine "$machine" "${accel[@]}" "${signed_flags[@]}" -m 8192 -smp 4 \
+    "${firmware[@]}" \
     -drive if=pflash,format=raw,file=work/vm/vars.fd "${disks[@]}" "${installed_shares[@]}" \
     -boot c -display none -serial stdio -monitor none -nic none -no-reboot \
     > "$report/installed-qemu.log" 2>&1
@@ -117,6 +140,9 @@ elif [[ $SCENARIO == install || $SCENARIO == wizard* ]]; then
   grep -q OMARCHY_INSTALLED_UEFI_BOOT_OK "$report/installed-serial.log"
   if grep -q OMARCHY_INSTALLED_BOOT_FAILED "$report/installed-serial.log"; then exit 1; fi
   if [[ $SCENARIO == wizard-signed ]]; then source tests/secureboot/installed.sh; fi
+  if [[ $SCENARIO == wizard-finalized ]]; then
+    grep -q GUARDED_WRITER_SIGNED_FINALIZATION_AND_FIRST_BOOT_PASSED "$report/installed-serial.log"
+  fi
   printf 'Upstream install and installed-system UEFI boot passed; protected bytes and Windows NVRAM entry unchanged.\n' > "$report/result.txt"
 else
   printf 'UEFI boot and kernel device-write boundary passed; protected bytes unchanged. No installation performed.\n' > "$report/result.txt"

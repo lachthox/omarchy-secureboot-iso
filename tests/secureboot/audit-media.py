@@ -105,7 +105,7 @@ try:
                 qmp.screenshot('audit-before-input.png')
                 qmp.text('3\nOMARCHYTESTC\n')
                 typed = True
-            match = re.search(r'OMARCHY_HARDWARE_REPORT=(\{[^\r\n]+\})',text)
+            match = re.search(r'OMARCHY_HARDWARE_REPORT=(\{[^\r\n]+\})[\r\n]',text)
             if match:
                 receipt = json.loads(match[1])
                 assert receipt['kernel_disk_write_denials'] is True

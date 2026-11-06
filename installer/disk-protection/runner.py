@@ -92,11 +92,19 @@ def verified_mapper(root_partition):
     return str(mapper)
 
 
-def install(saved, account, encrypted=True, discover=inventory, ci_interrupt=False, ci_probe=None):
+def install(saved, account, encrypted=True, discover=inventory, ci_interrupt=False, ci_probe=None,
+            secure_boot=True, secure_boot_tools=None):
     if os.geteuid() != 0 or not pathlib.Path('/run/archiso').exists():
         raise Refused('Installation requires root in the booted live image')
     if subprocess.run(['mountpoint', '-q', '/mnt']).returncode == 0:
         raise Refused('/mnt is already mounted')
+    tools = pathlib.Path(secure_boot_tools or '/opt/omarchy-custom/tools')
+    if secure_boot:
+        if not encrypted:
+            raise Refused('The signing profile requires an encrypted target root')
+        for file in ('bin/sbsign','bin/sbverify','shimx64.efi','mmx64.efi','systemd-bootx64.efi'):
+            if not (tools/file).is_file():
+                raise Refused('Authenticated Secure Boot tooling is incomplete')
     from upstream import apply
     apply()  # Source compatibility must pass before the first disk write.
     disks = discover()
@@ -131,7 +139,8 @@ def install(saved, account, encrypted=True, discover=inventory, ci_interrupt=Fal
                            input=account['password'].encode(), check=True)
             mapper = verified_mapper(parts[1])
         payload = {'plan': saved, 'target': target, 'parts': parts, 'account': account,
-                   'mapper': mapper, 'ci_interrupt': ci_interrupt, 'ci_probe': ci_probe}
+                   'mapper': mapper, 'ci_interrupt': ci_interrupt, 'ci_probe': ci_probe,
+                   'secure_boot':secure_boot,'secure_boot_tools':str(tools)}
         command = BASE+['--unit='+unit]+permissions(disks, target, [mapper] if mapper else [])+[
             '--property=InaccessiblePaths=/run/systemd/private /run/dbus/system_bus_socket /dev/mapper/control',
             '--property=ReadOnlyPaths=/sys/firmware/efi/efivars',
@@ -272,6 +281,28 @@ def writer():
         binding['esp_partuuid'] = subprocess.check_output(['blkid','-s','PARTUUID','-o','value',parts[0]],text=True).strip()
         (state/'storage.json').write_text(json.dumps(binding,indent=2)+'\n')
         (state/'storage.json').chmod(0o600)
+        if payload['secure_boot']:
+            import base64
+            import shutil
+            product = pathlib.Path('/mnt/usr/local/lib/omarchy-custom')
+            product.mkdir(parents=True,exist_ok=True)
+            shutil.copytree(HERE.parents[1]/'secureboot',product/'secureboot',
+                            ignore=shutil.ignore_patterns('__pycache__'))
+            shutil.copytree(payload['secure_boot_tools'],product/'tools',
+                            ignore=shutil.ignore_patterns('secureboot','packages','installed-signed-check.py','__pycache__'))
+            if payload['ci_probe']:
+                pathlib.Path('/mnt/etc/limine-entry-tool.d/98-ci-serial.conf').write_text(
+                    'KERNEL_CMDLINE[default]+=" console=ttyS0,115200 disablehooks=plymouth plymouth.enable=0"\n')
+                subprocess.run(['arch-chroot','/mnt','limine-update'],check=True)
+                (state/'acceptance-finalized').touch()
+            subprocess.run(['arch-chroot','/mnt','/usr/bin/python',
+                            '/usr/local/lib/omarchy-custom/secureboot/manage.py','initialize'],check=True)
+            public = pathlib.Path('/mnt/var/lib/omarchy-custom/keys/MOK.der')
+            fingerprint = hashlib.sha256(public.read_bytes()).hexdigest()
+            print('Owner certificate SHA256: '+fingerprint,flush=True)
+            print('Firmware enrollment file on the Crucial ESP: EFI/BOOT/omarchy-owner.cer',flush=True)
+            if payload['ci_probe']:
+                print('OMARCHY_LOCAL_MOK_DER='+base64.b64encode(public.read_bytes()).decode(),flush=True)
         if payload['ci_probe']:
             # Accepted only after the harness confirms its read-only share and
             # exact VM disk identities. Never reachable in a physical session.
@@ -279,7 +310,7 @@ def writer():
             for name in ('serial-getty@ttyS0.service', 'getty@tty1.service'):
                 service = pathlib.Path('/mnt/etc/systemd/system')/name
                 service.symlink_to('/dev/null')
-            if mapper:
+            if mapper and not payload['secure_boot']:
                 pathlib.Path('/mnt/etc/limine-entry-tool.d/98-ci-serial.conf').write_text(
                     'KERNEL_CMDLINE[default]+=" console=ttyS0,115200 disablehooks=plymouth plymouth.enable=0"\n')
                 subprocess.run(['arch-chroot', '/mnt', 'limine-update'], check=True)

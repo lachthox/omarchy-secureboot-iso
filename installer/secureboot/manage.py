@@ -211,7 +211,9 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('operation',choices=('initialize','preflight','update'))
     args = parser.parse_args()
-    if os.geteuid() != 0 or pathlib.Path('/run/archiso').exists():
+    guarded = bool(re.search(r'/omarchy-guarded-\d+\.service(?:$|/)',
+                            pathlib.Path('/proc/self/cgroup').read_text(),re.M))
+    if os.geteuid() != 0 or (pathlib.Path('/run/archiso').exists() and not guarded):
         raise InvalidBootImage('Signing policy runs on the encrypted installed system as root')
     os.environ['PATH'] = str(TOOLS/'bin')+':'+os.environ.get('PATH','/usr/bin')
     if args.operation == 'initialize':
