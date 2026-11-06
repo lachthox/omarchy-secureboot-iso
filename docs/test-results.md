@@ -1,4 +1,4 @@
-# Verified cloud results — 3 November 2026
+# Verified cloud results — 7 November 2026
 
 All ISO operations and destructive tests ran on GitHub-hosted runners. Tests
 used synthetic regular-file-backed QEMU drives, never host block devices.
@@ -68,9 +68,13 @@ synthetic targets; its interrupted-writer test also passed.
 The passphrase driver now waits for the complete cryptsetup prompt and allows
 terminal setup to finish before sending input: cryptsetup prints the prompt
 before disabling echo with TCSAFLUSH, which can discard an immediate response.
-The signed installed-system chain, interactive owner enrollment, real signed
-update integration, interactive recovery selection and NVIDIA module signing
-still require acceptance tests.
+The signed installed-system chain, real package-manager update hooks, generic
+DKMS signing/loading and keyboard selection of signed recovery have passed in
+[the November 7 package-policy run](https://github.com/lachthox/omarchy-secureboot-iso/actions/runs/42240457496).
+That run reinstalls the official kernel through pacman, builds and loads an
+owner-signed DKMS module, rejects a modified current image and boots stock
+recovery selected from the signed menu. Both protected disk hashes remain
+unchanged. The actual NVIDIA driver and motherboard remain hardware checks.
 
 The **Actual installed-system signing and recovery acceptance** workflow now
 exercises the real machine-local key-generation and update scripts on the
@@ -78,8 +82,10 @@ encrypted installed guest. It checks a successful update and a signing failure,
 then boots the signed current and independent recovery UKIs through Microsoft
 shim/MOK and rejects a modified initramfs. Its tooling share is read-only; the
 ephemeral private key stays inside the disposable encrypted target, which is not
-uploaded. The linked run passed. It does not test interactive MOK enrollment,
-an automatic recovery selector, package-manager update hooks, or physical media.
+uploaded. The November 3 run did not test interactive MOK enrollment, menu
+selection or package-manager hooks. The November 7 run adds the latter two.
+Recovery retains its initial UKI and module tree. Kernel reinstall is tested;
+upgrades across different kernel versions need additional acceptance.
 
 GPU Unlock remains disabled; source preparation, compatibility checks, recovery
 design and benchmark tooling exist, but target RTX 3070 performance/thermal/power

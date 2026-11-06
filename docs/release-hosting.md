@@ -1,7 +1,8 @@
 # GitHub Releases, without a storage bucket
 
 The original OmarchyInstaller release uploaded a 1,629,945,856-byte ISO directly
-to GitHub. The official Omarchy derivative is about 6.5 GB, beyond GitHub's
+to GitHub. The diagnostic derivative is about 6.5 GB and signed audit media is
+about 7.3 GB, beyond GitHub's
 2 GiB limit per asset. The selected design keeps all hosting on GitHub:
 
 1. Actions verifies the successful build/test run and the ISO checksum.
@@ -32,12 +33,17 @@ The generated helper is tested on a GitHub-hosted Windows runner using small
 synthetic files: exact reconstruction, repeat execution, corrupt parts, altered
 manifests, an existing conflicting ISO and final-hash failure cleanup.
 
-`release.yml` supports diagnostic prereleases and production releases. Diagnostic
+`release.yml` supports signed read-only hardware-validation prereleases,
+diagnostic prereleases and production releases. Hardware validation requires a
+successful signed-image build and an exact-image receipt for real MokManager
+enrollment/cancellation, keyboard-operated audit and modified-root rejection.
+It publishes only the public certificate, fingerprints and the receipt;
+physical installation must remain disabled. Diagnostic
 prereleases must be clearly labelled and must not be used as protected installers.
 Production publication additionally requires validated disk protection, a full
 installation and Secure Boot support. These production gates remain closed.
 
-The approved lightweight tag must point at the successful build commit before
+The lightweight tag must point at the successful build commit before
 dispatching the release. GitHub's workflow token cannot create a release at an
 older commit that changes workflow files relative to the default branch. Creating
 the tag through the maintainer's normal Git/CLI session avoids storing a broad

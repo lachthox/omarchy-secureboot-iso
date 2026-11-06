@@ -38,10 +38,20 @@ enforced write boundary is validated. An unattended configuration is an input,
 not a storage safety boundary. Personal credentials must never enter public
 artifacts. Use deferred provisioning for test seeds where supported.
 
-The pure disk policy and preview wizard are separate from the upstream writer.
-They do not authorize installation. Until cgroup device enforcement and the
-complete upstream writer have passed destructive guest-only tests, development
-images default to diagnostics and cannot be advertised as protected installers.
+The guarded wizard passes a freshly revalidated plan to the restricted upstream
+writer. Its actual encrypted/unencrypted installations, protected-device denials
+and interruption tests have passed. The writer also finalizes machine-local
+signing and target-local recovery. Physical release capabilities remain disabled
+until the read-only hardware boot confirms the actual disks.
+
+`build-hardware-validation.yml` authenticates and repacks the official live
+filesystem, embeds root authentication in the signed UKI, replaces the appended
+EFI partition with a signed shim/MokManager/UKI chain, and replays original hybrid
+boot equipment. It discards the ephemeral live signing key. The public certificate
+is carried on the EFI partition and in build metadata. The physical audit runs
+with every block device read-only. Enrollment/audit retests reuse this exact
+image through `audit-acceptance.yml`; release receipts bind its SHA256 and public
+certificate to the successful firmware UI and tamper tests.
 
 All heavy work is restricted by `cloud_only()` to GitHub-hosted Actions. Local
 checks use only source text and synthetic Python dictionaries. QEMU attaches

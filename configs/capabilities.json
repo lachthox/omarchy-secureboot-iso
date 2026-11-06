@@ -2,5 +2,5 @@
   "schema": 1,
   "physical_installation_enabled": false,
   "secure_boot_enforced": false,
-  "reason": "VM signed live/installed boot, update and independent recovery checks passed. Interactive owner enrollment, automatic recovery selection, signed hardware media and physical disk validation remain unverified."
+  "reason": "Guarded installs, signed live/installed boot, package signing hooks, DKMS and recovery menu passed cloud acceptance. Physical installation remains disabled pending read-only validation of the actual Crucial and protected Samsung/WD identities and motherboard firmware."
 }

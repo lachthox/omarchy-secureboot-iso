@@ -1,38 +1,38 @@
 # Omarchy Secure Boot ISO Builder
 
-Experimental, GitHub Actions-first modification of the **official Omarchy ISO**.
-All ISO downloads, extraction, modification, rebuilding and VM tests run on
-GitHub-hosted runners. The original `lachthox/OmarchyInstaller` is unchanged.
+GitHub Actions-first modification of the **official Omarchy 4.0.6 ISO** with a
+guarded installer, a signed boot chain and retained stock recovery. All ISO
+downloads, extraction, rebuilding and QEMU tests run on GitHub-hosted runners.
+The original `lachthox/OmarchyInstaller` remains unchanged.
 
-Repository: [lachthox/omarchy-secureboot-iso](https://github.com/lachthox/omarchy-secureboot-iso).
+The current hardware milestone is **signed read-only validation**. Physical
+installation remains disabled until a live boot confirms the Crucial BX500's
+serial and the protected Samsung/WD disks. GPU unlock remains disabled.
 
-Start with **Actions → Inspect official Omarchy ISO → Run workflow**. The workflow
-authenticates the pinned official ISO using both its release checksum and its
-OpenPGP signature, records boot structures and reads installer sources without
-executing them. Inspection artifacts and runner resource measurements are retained.
+Cloud tests have passed the actual guarded wizard, encrypted installation and
+installed boot, forced writer interruption, enforcing Microsoft shim/MOK boot,
+real pacman kernel signing hooks, a compiled and signed DKMS module, rejection of
+a modified current UKI and keyboard selection of signed stock recovery.
+Protected synthetic Windows disks remained byte-identical. See
+[test results](docs/test-results.md) for evidence and remaining hardware limits.
 
-The production installer, Secure Boot chain and GPU unlock are not validated yet.
-Do not use development images to install on physical hardware. No private signing
-keys are distributed. No local physical disks are accessed by development tooling.
+Use the [release page](https://github.com/lachthox/omarchy-secureboot-iso/releases)
+and follow [hardware validation instructions](docs/installation.md). The old
+`v0.1.0-diagnostic.1` release is unsigned diagnostic media and is superseded for
+the hardware milestone. A release labelled hardware-validation cannot install.
 
-For a build, run **Build diagnostic Omarchy ISO**. Normal runs test the ISO on the
-same runner before uploading it once: no ISO downloads between boot scenarios.
-The slower full unattended-install test is opt-in and does not block a separate
-quick build. **Retest an existing ISO artifact** downloads once for all scenarios.
+GitHub hosts the image in parts smaller than its 2 GiB per-asset limit.
+`Get-OmarchyISO.ps1` resumes and verifies those downloads, reconstructs one ISO
+and verifies its full SHA256. Flash that ISO with Rufus in **DD image mode**.
+No external bucket is required. The release includes its public certificate,
+fingerprints, build metadata and exact-image acceptance receipt.
 
-The [first diagnostic prerelease](https://github.com/lachthox/omarchy-secureboot-iso/releases/tag/v0.1.0-diagnostic.1)
-is available. Cloud tests have passed ISO boot, real upstream installation,
-installed-system boot, invalid-target rejection and forced installation
-interruption. Protected synthetic disks remained unchanged. The original hidden
-ESP is byte-identical after rebuilding. These are VM results; the production
-interactive installer, Secure Boot chain and GPU unlock remain gated.
-See [verified results and timings](docs/test-results.md), [measured findings](docs/feasibility.md),
-[architecture](docs/architecture.md), [security model](docs/security-model.md),
-[installation](docs/installation.md), [recovery](docs/recovery.md) and
-[release downloads](docs/release-hosting.md).
+For development, normal builds test the ISO on the build runner before uploading
+it. The official ISO cache is keyed by SHA256 and reauthenticated on every hit.
+Harness-only retests reuse an existing artifact with read-only source shares;
+they do not rebuild the ISO. Source safety checks run separately and quickly.
+Full installation and firmware tests run when relevant code changes or on demand.
 
-Releases use GitHub directly, like the original project. Because this ISO exceeds
-GitHub's 2 GiB per-file limit, Actions publishes smaller parts plus
-`Get-OmarchyISO.ps1`. Run that helper to obtain one checksum-verified ISO for
-Rufus. No external bucket is required. Diagnostic images are visibly labelled
-prereleases and are refused by the production release gate.
+See [architecture](docs/architecture.md), [security model](docs/security-model.md),
+[recovery](docs/recovery.md), [release downloads](docs/release-hosting.md),
+[upstream findings](docs/feasibility.md) and [GPU status](docs/gpu-unlock.md).
