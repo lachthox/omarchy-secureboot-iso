@@ -294,6 +294,12 @@ def writer():
                 pathlib.Path('/mnt/etc/limine-entry-tool.d/98-ci-serial.conf').write_text(
                     'KERNEL_CMDLINE[default]+=" console=ttyS0,115200 disablehooks=plymouth plymouth.enable=0"\n')
                 subprocess.run(['arch-chroot','/mnt','limine-update'],check=True)
+                # The signed policy reads /etc/kernel/cmdline directly. Limine's
+                # per-entry configuration does not update that source file.
+                cmdline = pathlib.Path('/mnt/etc/kernel/cmdline')
+                words = [w for w in cmdline.read_text().split() if w not in ('quiet','splash')]
+                words += ['console=ttyS0,115200','disablehooks=plymouth','plymouth.enable=0']
+                cmdline.write_text(' '.join(words)+'\n')
                 (state/'acceptance-finalized').touch()
             subprocess.run(['arch-chroot','/mnt','/usr/bin/python',
                             '/usr/local/lib/omarchy-custom/secureboot/manage.py','initialize'],check=True)
