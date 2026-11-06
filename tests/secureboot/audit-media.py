@@ -112,6 +112,9 @@ try:
         ready = None; typed = False
         while time.monotonic()<deadline and process.poll() is None:
             text = serial.read_text(errors='replace') if serial.exists() else ''
+            # journald's console output can wrap the JSON in ANSI colour reset
+            # sequences. Keep newline framing while removing presentation codes.
+            text = re.sub(r'\x1b\[[0-?]*[ -/]*[@-~]','',text)
             if tamper and 'OMARCHY_LIVE_ROOT_AUTHENTICATION_FAILED' in text:
                 assert 'OMARCHY_AUTHENTICATED_LIVE_ROOT_OK' not in text
                 assert 'Omarchy guarded setup' not in text

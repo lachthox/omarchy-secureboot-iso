@@ -31,7 +31,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           BUILD_RUN: ${{ inputs.build_run_id || '42243201529' }}
         run: |
-          gh run watch "$BUILD_RUN" --exit-status --interval 15
+          # Debug retests can reuse an image whose build succeeded even if its
+          # previous host-side test failed. Publication still requires a green build.
+          gh run watch "$BUILD_RUN" --interval 15
           python3 scripts/download-artifact.py --repository "$GITHUB_REPOSITORY" --run "$BUILD_RUN" --artifact hardware-validation-iso --destination out/hardware-validation
       - run: python3 tests/secureboot/mok-ui.py
       - run: env AUDIT_ENROLLED_VARS=work/enrollment/enroll-vars.fd python3 tests/secureboot/audit-media.py
