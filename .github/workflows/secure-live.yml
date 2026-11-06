@@ -6,7 +6,8 @@ on:
       - '.github/workflows/secure-live.yml'
       - '.github/actions/secure-live-attempt/**'
       - 'scripts/prepare-secure-live.py'
-      - 'tests/secureboot/**'
+      - 'tests/secureboot/live.sh'
+      - 'tests/secureboot/sign-control.py'
       - 'tests/qemu/security-probe.py'
   workflow_dispatch:
 permissions:

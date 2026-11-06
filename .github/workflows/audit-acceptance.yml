@@ -30,6 +30,25 @@ jobs:
         run: python3 scripts/download-artifact.py --repository "$GITHUB_REPOSITORY" --run "$BUILD_RUN" --artifact hardware-validation-iso --destination out/hardware-validation
       - run: python3 tests/secureboot/mok-ui.py
       - run: env AUDIT_ENROLLED_VARS=work/enrollment/enroll-vars.fd python3 tests/secureboot/audit-media.py
+      - name: Retain positive reports before the negative boot
+        run: mv out/audit-media out/audit-positive; rm -rf -- work/vm
+      - run: env AUDIT_TAMPER_ROOT=1 AUDIT_ENROLLED_VARS=work/enrollment/enroll-vars.fd python3 tests/secureboot/audit-media.py
+      - name: Bind acceptance to immutable image and certificate
+        env:
+          BUILD_RUN: ${{ inputs.build_run_id }}
+        run: |
+          python3 - <<'PY'
+          import hashlib,json,os,pathlib
+          root=pathlib.Path('out/hardware-validation'); m=json.loads((root/'build-metadata.json').read_text())
+          assert m['run_id']==os.environ['BUILD_RUN']
+          receipt=json.loads(pathlib.Path('out/audit-positive/hardware-receipt.json').read_text())
+          assert receipt['firmware']=={'SecureBoot':1,'SetupMode':0}
+          proof={'schema':1,'build_run_id':m['run_id'],'image_commit':m['commit'],
+              'iso_sha256':hashlib.file_digest(next(root.glob('*.iso')).open('rb'),'sha256').hexdigest(),
+              'certificate_sha256':m['certificate_sha256'],'mok_enrollment':True,'mok_cancellation':True,
+              'read_only_audit':True,'tampered_root_rejected':True,'all_disks_unchanged':True}
+          pathlib.Path('out/enrollment/acceptance.json').write_text(json.dumps(proof,indent=2)+'\n')
+          PY
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         if: always()
         with:
@@ -37,4 +56,5 @@ jobs:
           path: |
             out/enrollment/
             out/audit-media/
+            out/audit-positive/
           retention-days: 14

@@ -78,6 +78,16 @@ serial = (REPORT/'audit-serial.log').resolve()
 # never opened for writing. Kernel policy, not QEMU read-only flags, protects
 # the synthetic installation and Windows disks.
 usb = ROOT/'audit-usb.raw'; shutil.copyfile(IMAGE,usb)
+tamper = os.environ.get('AUDIT_TAMPER_ROOT') == '1'
+if tamper:
+    extent = subprocess.check_output(['xorriso','-indev',str(usb),'-find',
+        '/arch/x86_64/airootfs.sfs','-exec','report_lba','--'],text=True,stderr=subprocess.STDOUT)
+    matches = re.findall(r'File data lba:\s*\d+\s*,\s*(\d+)\s*,\s*(\d+)\s*,',extent)
+    assert len(matches) == 1, 'Expected one contiguous SquashFS file extent'
+    sector,blocks = map(int,matches[0]); assert blocks*2048 > 1048576
+    with usb.open('r+b') as stream:
+        stream.seek(sector*2048+1048576); original=stream.read(1)
+        stream.seek(-1,1); stream.write(bytes([original[0]^1]))
 command = ['qemu-system-x86_64','-machine','q35,smm=on',*accel,'-m','12288','-smp','4',
     '-global','driver=cfi.pflash01,property=secure,value=on',
     '-drive','if=pflash,format=raw,readonly=on,file=/usr/share/OVMF/OVMF_CODE_4M.secboot.fd',
@@ -102,6 +112,11 @@ try:
         ready = None; typed = False
         while time.monotonic()<deadline and process.poll() is None:
             text = serial.read_text(errors='replace') if serial.exists() else ''
+            if tamper and 'OMARCHY_LIVE_ROOT_AUTHENTICATION_FAILED' in text:
+                assert 'OMARCHY_AUTHENTICATED_LIVE_ROOT_OK' not in text
+                assert 'Omarchy guarded setup' not in text
+                (REPORT/'tampered-root-result.txt').write_text('Modified external SquashFS rejected before mount and before the wizard. All simulated disks unchanged.\n')
+                break
             if 'OMARCHY_AUTHENTICATED_LIVE_ROOT_OK' in text and ready is None:
                 ready = time.monotonic()+20
             if ready and time.monotonic()>=ready and not typed:
@@ -133,4 +148,5 @@ finally:
     assert target.st_size == 1_000_204_886_016 and target.st_blocks == 0, 'Blank sparse target changed'
     (REPORT/'disk-verification.json').write_text(json.dumps({'protected_before':before,'protected_after':after,
         'target_bytes':target.st_size,'target_allocated_blocks':target.st_blocks},indent=2)+'\n')
-(REPORT/'result.txt').write_text('Actual signed USB image, immutable live root, physical audit entry, keyboard selection and serial validation passed. All simulated SSDs unchanged.\n')
+if not tamper:
+    (REPORT/'result.txt').write_text('Actual signed USB image, immutable live root, physical audit entry, keyboard selection and serial validation passed. All simulated SSDs unchanged.\n')
