@@ -1,0 +1,40 @@
+name: Actual signed-media enrollment and hardware audit
+on:
+  workflow_dispatch:
+    inputs:
+      build_run_id:
+        description: Existing signed hardware image build run
+        required: true
+        type: string
+permissions:
+  contents: read
+  actions: read
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - run: bash scripts/install-tools.sh build
+        timeout-minutes: 5
+      - run: bash scripts/prepare-runner-space.sh
+      - run: |
+          python3 -m venv --system-site-packages work/secureboot-tools
+          work/secureboot-tools/bin/pip install --no-deps virt-firmware==26.10 pefile==2024.8.26
+      - name: Reuse the exact signed image
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BUILD_RUN: ${{ inputs.build_run_id }}
+        run: python3 scripts/download-artifact.py --repository "$GITHUB_REPOSITORY" --run "$BUILD_RUN" --artifact hardware-validation-iso --destination out/hardware-validation
+      - run: python3 tests/secureboot/mok-ui.py
+      - run: env AUDIT_ENROLLED_VARS=work/enrollment/enroll-vars.fd python3 tests/secureboot/audit-media.py
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        if: always()
+        with:
+          name: enrollment-audit-reports
+          path: |
+            out/enrollment/
+            out/audit-media/
+          retention-days: 14

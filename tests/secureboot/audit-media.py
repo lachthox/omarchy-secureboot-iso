@@ -31,6 +31,9 @@ tools = pathlib.Path('work/secureboot-tools/bin/virt-fw-vars')
 subprocess.run([str(tools),'--input','/usr/share/OVMF/OVMF_VARS_4M.ms.fd',
                 '--output',str(ROOT/'vars.fd'),'--add-mok','dcf13531-f232-4bb9-8efc-c0c16bcf7f24',
                 str(ROOT/'owner.pem'),'--secure-boot','--output-json',str(REPORT/'enrolled-firmware.json')],check=True)
+if os.environ.get('AUDIT_ENROLLED_VARS'):
+    # Use firmware modified through actual MokManager keyboard confirmation.
+    shutil.copyfile(os.environ['AUDIT_ENROLLED_VARS'],ROOT/'vars.fd')
 
 
 class QMP:

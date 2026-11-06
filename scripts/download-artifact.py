@@ -61,11 +61,13 @@ def parallel_download(url,size,destination,workers=8):
 def main():
     assert os.environ.get('GITHUB_ACTIONS')=='true' and os.environ.get('RUNNER_ENVIRONMENT')=='github-hosted'
     p=argparse.ArgumentParser(); p.add_argument('--repository',required=True); p.add_argument('--run',required=True)
-    p.add_argument('--destination',type=pathlib.Path,required=True); a=p.parse_args()
+    p.add_argument('--destination',type=pathlib.Path,required=True)
+    p.add_argument('--artifact',choices=['diagnostic-iso','hardware-validation-iso'],default='diagnostic-iso')
+    a=p.parse_args()
     assert re.fullmatch(r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+',a.repository) and a.run.isdigit()
     response=json.loads(subprocess.check_output(['gh','api',f'repos/{a.repository}/actions/runs/{a.run}/artifacts']))
-    matches=[x for x in response['artifacts'] if x['name']=='diagnostic-iso' and not x['expired']]
-    assert len(matches)==1, 'Expected one immutable diagnostic-iso artifact'
+    matches=[x for x in response['artifacts'] if x['name']==a.artifact and not x['expired']]
+    assert len(matches)==1, 'Expected one immutable '+a.artifact+' artifact'
     artifact=matches[0]; size=artifact['size_in_bytes']
     available=shutil.disk_usage('.').free
     print(json.dumps({'artifact_bytes':size,'free_bytes':available}),flush=True)
